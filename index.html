@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photography Portfolio</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            line-height: 1.6;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            padding: clamp(40px, 8vw, 80px) clamp(16px, 5vw, 40px);
+            background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+        }
+
+        h1 {
+            font-size: clamp(1.5rem, 5vw, 3rem);
+            font-weight: 300;
+            letter-spacing: clamp(4px, 1.5vw, 10px);
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .tagline {
+            font-size: clamp(0.75rem, 2.5vw, 1rem);
+            color: #888;
+            letter-spacing: clamp(1px, 0.5vw, 3px);
+            text-transform: uppercase;
+        }
+
+        /* Gallery Grid - Mobile First */
+        .gallery {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2px;
+            padding: 2px;
+        }
+
+        .gallery-item {
+            position: relative;
+            overflow: hidden;
+            aspect-ratio: 3/2;
+            cursor: pointer;
+        }
+
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s ease, filter 0.3s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Hover effects only for devices that support hover */
+        @media (hover: hover) and (pointer: fine) {
+            .gallery-item:hover img {
+                transform: scale(1.05);
+                filter: brightness(1.1);
+            }
+        }
+
+        /* Touch feedback for mobile */
+        @media (hover: none) {
+            .gallery-item:active img {
+                transform: scale(0.98);
+                filter: brightness(0.9);
+            }
+        }
+
+        /* Lightbox */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.97);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            touch-action: pan-y pinch-zoom;
+        }
+
+        .lightbox.active {
+            display: flex;
+        }
+
+        .lightbox img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            padding: 10px;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: #fff;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.3s, transform 0.2s;
+            z-index: 1001;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            border: none;
+        }
+
+        .lightbox-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 48px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            color: #fff;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.3s, background 0.3s;
+            user-select: none;
+            background: rgba(0, 0, 0, 0.3);
+            border: none;
+            z-index: 1001;
+        }
+
+        .lightbox-prev {
+            left: 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .lightbox-next {
+            right: 0;
+            border-radius: 8px 0 0 8px;
+        }
+
+        @media (hover: hover) {
+            .lightbox-close:hover,
+            .lightbox-nav:hover {
+                opacity: 1;
+                background: rgba(255, 255, 255, 0.15);
+            }
+        }
+
+        /* Image counter */
+        .lightbox-counter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            letter-spacing: 2px;
+            z-index: 1001;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: clamp(30px, 6vw, 60px) clamp(16px, 5vw, 40px);
+            color: #555;
+            font-size: clamp(0.8rem, 2vw, 0.9rem);
+        }
+
+        .contact-btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: clamp(12px, 2vw, 15px) clamp(30px, 5vw, 50px);
+            background: transparent;
+            border: 1px solid #fff;
+            color: #fff;
+            text-decoration: none;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-size: clamp(0.75rem, 2vw, 0.85rem);
+            transition: all 0.3s ease;
+            min-height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @media (hover: hover) {
+            .contact-btn:hover {
+                background: #fff;
+                color: #0a0a0a;
+            }
+        }
+
+        /* Focus states for accessibility */
+        .contact-btn:focus-visible,
+        .lightbox-close:focus-visible,
+        .lightbox-nav:focus-visible,
+        .gallery-item:focus-visible {
+            outline: 2px solid #fff;
+            outline-offset: 2px;
+        }
+
+        /* ===== RESPONSIVE BREAKPOINTS ===== */
+
+        /* Small phones (480px+) - 2 columns */
+        @media (min-width: 480px) {
+            .gallery {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 3px;
+                padding: 3px;
+            }
+        }
+
+        /* Large phones / Small tablets (640px+) */
+        @media (min-width: 640px) {
+            .lightbox img {
+                max-width: 95%;
+                max-height: 95%;
+                padding: 0;
+            }
+
+            .lightbox-nav {
+                width: 60px;
+                height: 100px;
+                font-size: 36px;
+            }
+
+            .lightbox-close {
+                top: 20px;
+                right: 20px;
+                width: 50px;
+                height: 50px;
+                font-size: 36px;
+            }
+        }
+
+        /* Tablets (768px+) - 3 columns */
+        @media (min-width: 768px) {
+            .gallery {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 4px;
+                padding: 4px;
+            }
+        }
+
+        /* Small desktops (1024px+) */
+        @media (min-width: 1024px) {
+            .gallery {
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            }
+
+            .lightbox img {
+                max-width: 90%;
+                max-height: 90%;
+                border-radius: 2px;
+            }
+
+            .lightbox-nav {
+                width: 70px;
+                height: 120px;
+                font-size: 44px;
+            }
+
+            .lightbox-close {
+                top: 25px;
+                right: 30px;
+                width: 56px;
+                height: 56px;
+                font-size: 40px;
+            }
+        }
+
+        /* Large desktops (1440px+) */
+        @media (min-width: 1440px) {
+            .gallery {
+                grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+                max-width: 2400px;
+                margin: 0 auto;
+            }
+        }
+
+        /* Ultra-wide (1920px+) */
+        @media (min-width: 1920px) {
+            .gallery {
+                grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+            }
+        }
+
+        /* Landscape mobile optimization */
+        @media (max-height: 500px) and (orientation: landscape) {
+            header {
+                padding: 20px 16px;
+            }
+
+            h1 {
+                font-size: 1.3rem;
+                margin-bottom: 5px;
+            }
+
+            .tagline {
+                font-size: 0.7rem;
+            }
+
+            .lightbox img {
+                max-height: 85vh;
+            }
+
+            .lightbox-close {
+                top: 10px;
+                right: 10px;
+                width: 40px;
+                height: 40px;
+                font-size: 28px;
+            }
+
+            .lightbox-nav {
+                height: 60px;
+                font-size: 24px;
+            }
+
+            .lightbox-counter {
+                bottom: 10px;
+                font-size: 12px;
+            }
+        }
+
+        /* Reduced motion preference */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+
+            html {
+                scroll-behavior: auto;
+            }
+        }
+
+        /* Print styles */
+        @media print {
+            .lightbox,
+            .contact-btn {
+                display: none !important;
+            }
+
+            body {
+                background: #fff;
+                color: #000;
+            }
+
+            header {
+                background: none;
+            }
+
+            .gallery {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Portfolio</h1>
+        <p class="tagline">Capturing Life's Beautiful Moments</p>
+    </header>
+
+    <main class="gallery">
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0562.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0668.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0341-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0209.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0204-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0424.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0590.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0139-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0319.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0385-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0574.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0231-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0618_BW.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0292-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0413-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0646.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0026-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0505.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0197-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0034-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0056-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0069-1.jpg" alt="Portfolio image" loading="lazy"></div>
+        <div class="gallery-item"><img src="../Portfolio Selections/DSC_0087.jpg" alt="Portfolio image" loading="lazy"></div>
+    </main>
+
+    <footer>
+        <a href="mailto:your@email.com" class="contact-btn">Get in Touch</a>
+        <p style="margin-top: 30px;">&copy; 2025 Photography Portfolio</p>
+    </footer>
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Image viewer">
+        <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close image viewer">&times;</button>
+        <button class="lightbox-nav lightbox-prev" onclick="changeImage(-1)" aria-label="Previous image">&#10094;</button>
+        <img src="" alt="Enlarged photo" id="lightbox-img">
+        <button class="lightbox-nav lightbox-next" onclick="changeImage(1)" aria-label="Next image">&#10095;</button>
+        <div class="lightbox-counter" id="lightbox-counter" aria-live="polite"></div>
+    </div>
+
+    <script>
+        const galleryItems = document.querySelectorAll('.gallery-item img');
+        const lightbox = document.getElementById('lightbox');
+        const lightboxImg = document.getElementById('lightbox-img');
+        const lightboxCounter = document.getElementById('lightbox-counter');
+        let currentIndex = 0;
+        let lastFocusedElement = null;
+
+        // Touch swipe variables
+        let touchStartX = 0;
+        let touchEndX = 0;
+        const swipeThreshold = 50;
+
+        function updateCounter() {
+            lightboxCounter.textContent = `${currentIndex + 1} / ${galleryItems.length}`;
+        }
+
+        function openLightbox(index) {
+            lastFocusedElement = document.activeElement;
+            currentIndex = index;
+            lightboxImg.src = galleryItems[index].src;
+            lightboxImg.alt = galleryItems[index].alt || `Photo ${index + 1}`;
+            updateCounter();
+            lightbox.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            // Focus the close button for accessibility
+            setTimeout(() => lightbox.querySelector('.lightbox-close').focus(), 100);
+        }
+
+        galleryItems.forEach((img, index) => {
+            // Make gallery items focusable
+            img.parentElement.setAttribute('tabindex', '0');
+            img.parentElement.setAttribute('role', 'button');
+            img.parentElement.setAttribute('aria-label', `View photo ${index + 1}`);
+
+            img.addEventListener('click', () => openLightbox(index));
+
+            // Keyboard support for gallery items
+            img.parentElement.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openLightbox(index);
+                }
+            });
+        });
+
+        function closeLightbox() {
+            lightbox.classList.remove('active');
+            document.body.style.overflow = 'auto';
+            // Return focus to last focused element
+            if (lastFocusedElement) {
+                lastFocusedElement.focus();
+            }
+        }
+
+        function changeImage(direction) {
+            currentIndex += direction;
+            if (currentIndex >= galleryItems.length) currentIndex = 0;
+            if (currentIndex < 0) currentIndex = galleryItems.length - 1;
+            lightboxImg.src = galleryItems[currentIndex].src;
+            lightboxImg.alt = galleryItems[currentIndex].alt || `Photo ${currentIndex + 1}`;
+            updateCounter();
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (!lightbox.classList.contains('active')) return;
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowRight') changeImage(1);
+            if (e.key === 'ArrowLeft') changeImage(-1);
+        });
+
+        // Click outside to close
+        lightbox.addEventListener('click', (e) => {
+            if (e.target === lightbox) closeLightbox();
+        });
+
+        // Touch swipe support
+        lightbox.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        lightbox.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, { passive: true });
+
+        function handleSwipe() {
+            const swipeDistance = touchEndX - touchStartX;
+            if (Math.abs(swipeDistance) > swipeThreshold) {
+                if (swipeDistance > 0) {
+                    changeImage(-1); // Swipe right = previous
+                } else {
+                    changeImage(1);  // Swipe left = next
+                }
+            }
+        }
+
+        // Prevent scroll when lightbox is open (for iOS)
+        lightbox.addEventListener('touchmove', (e) => {
+            if (e.target === lightbox || e.target === lightboxImg) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    </script>
+</body>
+</html>
