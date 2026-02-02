@@ -1,28 +1,40 @@
 """
-Auto-categorize portfolio images using CLIP vision model.
+Auto-categorize portfolio images using LOCAL LM Studio vision model.
 
-This script analyzes images and automatically assigns categories
-(landscape, portrait, nature, urban) based on image content.
+This script analyzes images LOCALLY using your LM Studio server -
+no images are sent to external services.
 
 Requirements:
-    pip install torch torchvision transformers pillow
+    pip install pillow requests
+
+Setup:
+    1. Open LM Studio
+    2. Load a vision-capable model (e.g., LLaVA, Qwen2-VL, Pixtral)
+    3. Start the local server (usually at http://localhost:1234)
+    4. Run this script
 
 Usage:
     python auto_categorize.py
 """
 
-import os
+import base64
+import json
+import re
 import sys
 from pathlib import Path
 
-# Check for required packages
+# Fix Windows console encoding
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 try:
-    import torch
-    from PIL import Image
-    from transformers import CLIPProcessor, CLIPModel
-except ImportError as e:
+    import requests
+    from PIL import Image, ImageFile
+    Image.MAX_IMAGE_PIXELS = None
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+except ImportError:
     print("Missing required packages. Install them with:")
-    print("    pip install torch torchvision transformers pillow")
+    print("    pip install pillow requests")
     sys.exit(1)
 
 
@@ -31,144 +43,134 @@ IMAGES_DIR = Path(r"M:\Photography\Portfolio Selections")
 HTML_FILE = Path(r"M:\Photography\Portfolio Website\index.html")
 CATEGORIES = ["landscape", "portrait", "nature", "urban"]
 
-# Detailed prompts for better classification accuracy
-CATEGORY_PROMPTS = {
-    "landscape": [
-        "a landscape photograph with mountains, hills, or scenic vista",
-        "a wide scenic photograph of nature with sky and horizon",
-        "a photograph of mountains, valleys, or open terrain",
-        "a sunset or sunrise landscape photograph",
-    ],
-    "portrait": [
-        "a portrait photograph of a person",
-        "a close-up photograph of a human face",
-        "a photograph focused on a person or people",
-        "a headshot or portrait with a person as the main subject",
-    ],
-    "nature": [
-        "a nature photograph of plants, flowers, or wildlife",
-        "a close-up photograph of animals, insects, or flora",
-        "a macro photograph of natural elements",
-        "a photograph of trees, forests, or natural details",
-    ],
-    "urban": [
-        "an urban photograph of buildings or city architecture",
-        "a street photography image of city life",
-        "a photograph of urban infrastructure or cityscape",
-        "an architectural photograph of man-made structures",
-    ],
-}
+# LM Studio local server settings
+LM_STUDIO_URL = "http://localhost:11434/v1/chat/completions"
+MAX_IMAGE_SIZE = 1024  # Resize images to this max dimension for faster processing
 
 
-def load_model():
-    """Load CLIP model and processor."""
-    print("Loading CLIP model (this may take a moment on first run)...")
-    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+def resize_image_for_analysis(image_path: Path) -> bytes:
+    """Resize image to reasonable size and convert to base64."""
+    with Image.open(image_path) as img:
+        # Convert to RGB if necessary
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
 
-    # Use GPU if available
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = model.to(device)
-    print(f"Model loaded on {device.upper()}")
+        # Resize if too large
+        if max(img.size) > MAX_IMAGE_SIZE:
+            ratio = MAX_IMAGE_SIZE / max(img.size)
+            new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+            img = img.thumbnail(new_size, Image.Resampling.LANCZOS)
+            img = Image.open(image_path).convert('RGB')
+            img.thumbnail((MAX_IMAGE_SIZE, MAX_IMAGE_SIZE), Image.Resampling.LANCZOS)
 
-    return model, processor, device
+        # Save to bytes
+        import io
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG', quality=85)
+        return buffer.getvalue()
 
 
-def classify_image(image_path: Path, model, processor, device) -> tuple[str, dict]:
+def image_to_base64(image_path: Path) -> str:
+    """Convert image to base64 string."""
+    image_bytes = resize_image_for_analysis(image_path)
+    return base64.b64encode(image_bytes).decode('utf-8')
+
+
+def check_lm_studio_connection():
+    """Check if LM Studio server is running."""
+    try:
+        response = requests.get("http://localhost:11434/v1/models", timeout=5)
+        if response.status_code == 200:
+            models = response.json().get('data', [])
+            if models:
+                model_id = models[0].get('id', 'unknown')
+                print(f"Connected to LM Studio - Model: {model_id}")
+                return True
+        return False
+    except requests.exceptions.ConnectionError:
+        return False
+
+
+def classify_image(image_path: Path) -> tuple[str, str, dict]:
     """
-    Classify an image into one of the categories.
+    Classify an image using local LM Studio vision model.
 
     Returns:
-        tuple: (best_category, confidence_scores)
+        tuple: (category, alt_text, confidence_info)
     """
-    # Load and preprocess image
-    image = Image.open(image_path).convert("RGB")
+    # Convert image to base64
+    image_b64 = image_to_base64(image_path)
 
-    # Build all prompts
-    all_prompts = []
-    prompt_to_category = {}
-    for category, prompts in CATEGORY_PROMPTS.items():
-        for prompt in prompts:
-            all_prompts.append(prompt)
-            prompt_to_category[prompt] = category
+    # Build the prompt
+    prompt = """Analyze this photograph and classify it into ONE of these categories:
+- landscape: scenic vistas, mountains, horizons, wide nature views, skies, sunsets
+- portrait: photos of people, faces, human subjects as main focus
+- nature: close-ups of plants, animals, wildlife, flowers, natural details
+- urban: cities, buildings, architecture, streets, man-made structures
 
-    # Process image and text
-    inputs = processor(
-        text=all_prompts,
-        images=image,
-        return_tensors="pt",
-        padding=True
-    )
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+Also write a brief, descriptive alt text (10-15 words) describing what's in the image.
 
-    # Get predictions
-    with torch.no_grad():
-        outputs = model(**inputs)
-        logits_per_image = outputs.logits_per_image
-        probs = logits_per_image.softmax(dim=1).cpu().numpy()[0]
+Respond in this exact JSON format only:
+{"category": "landscape|portrait|nature|urban", "alt_text": "description here", "confidence": "high|medium|low"}"""
 
-    # Aggregate scores by category
-    category_scores = {cat: 0.0 for cat in CATEGORIES}
-    for prompt, prob in zip(all_prompts, probs):
-        category = prompt_to_category[prompt]
-        category_scores[category] += prob
-
-    # Normalize scores
-    total = sum(category_scores.values())
-    category_scores = {k: v / total for k, v in category_scores.items()}
-
-    # Get best category
-    best_category = max(category_scores, key=category_scores.get)
-
-    return best_category, category_scores
-
-
-def generate_alt_text(image_path: Path, category: str) -> str:
-    """Generate descriptive alt text based on filename and category."""
-    filename = image_path.stem
-
-    # Base descriptions by category
-    descriptions = {
-        "landscape": [
-            "Scenic landscape with dramatic lighting",
-            "Expansive vista capturing natural beauty",
-            "Landscape photograph at golden hour",
-            "Panoramic view of natural terrain",
-            "Serene landscape with atmospheric conditions",
+    # Call local LM Studio API
+    payload = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_b64}"
+                        }
+                    }
+                ]
+            }
         ],
-        "portrait": [
-            "Portrait photograph with natural lighting",
-            "Candid portrait capturing a genuine moment",
-            "Environmental portrait with thoughtful composition",
-            "Portrait showcasing personality and emotion",
-            "Artistic portrait with creative lighting",
-        ],
-        "nature": [
-            "Nature photography capturing organic beauty",
-            "Close-up of natural elements and textures",
-            "Wildlife or flora in natural habitat",
-            "Macro photograph revealing natural details",
-            "Nature scene with rich colors and patterns",
-        ],
-        "urban": [
-            "Urban architecture and geometric forms",
-            "Street photography capturing city life",
-            "Architectural details and urban patterns",
-            "Cityscape with dynamic composition",
-            "Urban environment with striking contrast",
-        ],
+        "max_tokens": 200,
+        "temperature": 0.1,
+        "stream": False
     }
 
-    # Use hash of filename to consistently pick a description
-    desc_list = descriptions.get(category, descriptions["landscape"])
-    index = hash(filename) % len(desc_list)
+    try:
+        response = requests.post(LM_STUDIO_URL, json=payload, timeout=120)
+        response.raise_for_status()
 
-    # Add B&W note if applicable
-    base_desc = desc_list[index]
-    if "_BW" in filename or "_bw" in filename:
-        base_desc = f"Black and white {base_desc.lower()}"
+        result = response.json()
+        content = result['choices'][0]['message']['content'].strip()
 
-    return base_desc
+        # Parse JSON response
+        # Try to extract JSON from the response
+        json_match = re.search(r'\{[^}]+\}', content)
+        if json_match:
+            data = json.loads(json_match.group())
+            category = data.get('category', 'landscape').lower()
+            alt_text = data.get('alt_text', 'Portfolio photograph')
+            confidence = data.get('confidence', 'medium')
+
+            # Validate category
+            if category not in CATEGORIES:
+                category = 'landscape'
+
+            return category, alt_text, {'confidence': confidence, 'raw': content}
+        else:
+            # Fallback: try to find category keyword in response
+            content_lower = content.lower()
+            for cat in CATEGORIES:
+                if cat in content_lower:
+                    return cat, "Portfolio photograph", {'confidence': 'low', 'raw': content}
+
+            return 'landscape', "Portfolio photograph", {'confidence': 'low', 'raw': content}
+
+    except requests.exceptions.Timeout:
+        return 'landscape', "Portfolio photograph", {'error': 'timeout'}
+    except Exception as e:
+        return 'landscape', "Portfolio photograph", {'error': str(e)}
 
 
 def scan_images(images_dir: Path) -> list[Path]:
@@ -188,16 +190,11 @@ def update_html(html_file: Path, categorized_images: dict):
     with open(html_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Update each image entry
     for filename, data in categorized_images.items():
         category = data["category"]
-        alt_text = data["alt_text"]
+        alt_text = data["alt_text"].replace('"', '&quot;')
 
-        # Find and replace the gallery item for this image
-        # Match pattern: data-category="anything" ... src=".../{filename}"
-        import re
-
-        # Pattern to find the gallery item containing this image
+        # Pattern to find and replace the gallery item
         pattern = rf'(<div class="gallery-item"[^>]*data-category=")[^"]*("[^>]*><img[^>]*src="[^"]*{re.escape(filename)}"[^>]*alt=")[^"]*(")'
         replacement = rf'\g<1>{category}\g<2>{alt_text}\g<3>'
 
@@ -211,28 +208,37 @@ def update_html(html_file: Path, categorized_images: dict):
 
 def main():
     print("=" * 60)
-    print("Portfolio Image Auto-Categorizer")
+    print("Portfolio Image Auto-Categorizer (LOCAL)")
+    print("Using LM Studio - No images sent externally")
     print("=" * 60)
 
-    # Check if images directory exists
+    # Check LM Studio connection
+    print("\nChecking LM Studio connection...")
+    if not check_lm_studio_connection():
+        print("\nERROR: Cannot connect to LM Studio server!")
+        print("\nPlease ensure:")
+        print("  1. LM Studio is open")
+        print("  2. A vision model is loaded (e.g., LLaVA, Qwen2-VL)")
+        print("  3. Local server is started (Server tab -> Start Server)")
+        print("  4. Server is running at http://localhost:11434")
+        sys.exit(1)
+
+    # Check images directory
     if not IMAGES_DIR.exists():
-        print(f"Error: Images directory not found: {IMAGES_DIR}")
+        print(f"\nError: Images directory not found: {IMAGES_DIR}")
         sys.exit(1)
 
     # Scan for images
     images = scan_images(IMAGES_DIR)
     if not images:
-        print(f"No images found in {IMAGES_DIR}")
+        print(f"\nNo images found in {IMAGES_DIR}")
         sys.exit(1)
 
     print(f"\nFound {len(images)} images to analyze")
-
-    # Load model
-    model, processor, device = load_model()
+    print("This may take a while depending on your hardware...")
 
     # Classify each image
-    print("\nAnalyzing images...")
-    print("-" * 60)
+    print("\n" + "-" * 60)
 
     categorized = {}
 
@@ -241,25 +247,26 @@ def main():
         print(f"[{i}/{len(images)}] {filename}...", end=" ", flush=True)
 
         try:
-            category, scores = classify_image(image_path, model, processor, device)
-            alt_text = generate_alt_text(image_path, category)
+            category, alt_text, info = classify_image(image_path)
 
             categorized[filename] = {
                 "category": category,
-                "scores": scores,
                 "alt_text": alt_text,
+                "info": info,
             }
 
-            # Show confidence
-            confidence = scores[category] * 100
-            print(f"{category.upper()} ({confidence:.1f}%)")
+            confidence = info.get('confidence', '?')
+            print(f"{category.upper()} ({confidence})")
+
+            if 'error' in info:
+                print(f"    Warning: {info['error']}")
 
         except Exception as e:
             print(f"ERROR: {e}")
             categorized[filename] = {
-                "category": "landscape",  # fallback
-                "scores": {},
+                "category": "landscape",
                 "alt_text": "Portfolio photograph",
+                "info": {"error": str(e)},
             }
 
     # Print summary
@@ -272,8 +279,8 @@ def main():
         category_counts[data["category"]] += 1
 
     for cat, count in sorted(category_counts.items(), key=lambda x: -x[1]):
-        bar = "█" * count
-        print(f"  {cat.capitalize():12} {count:3} {bar}")
+        bar = "#" * count
+        print(f"  {cat.capitalize():12} {count:3} [{bar}]")
 
     # Show detailed results
     print("\n" + "-" * 60)
@@ -283,13 +290,9 @@ def main():
     for filename, data in categorized.items():
         print(f"\n{filename}")
         print(f"  Category: {data['category'].upper()}")
-        if data["scores"]:
-            scores_str = " | ".join(
-                f"{cat}: {score*100:.0f}%"
-                for cat, score in sorted(data["scores"].items(), key=lambda x: -x[1])
-            )
-            print(f"  Scores:   {scores_str}")
         print(f"  Alt text: {data['alt_text']}")
+        if 'error' in data['info']:
+            print(f"  Error: {data['info']['error']}")
 
     # Ask to update HTML
     print("\n" + "=" * 60)
@@ -300,15 +303,16 @@ def main():
         print("\nDone! Categories and alt text have been updated.")
         print("Review the changes and adjust any misclassifications manually.")
     else:
-        print("\nNo changes made. You can manually update the HTML using the results above.")
+        print("\nNo changes made.")
 
-    # Generate copy-paste ready HTML (optional output)
+    # Generate copy-paste ready HTML
     print("\n" + "-" * 60)
     print("COPY-PASTE HTML (if needed):")
     print("-" * 60)
 
     for filename, data in categorized.items():
-        print(f'<div class="gallery-item" data-category="{data["category"]}"><img src="../Portfolio Selections/{filename}" alt="{data["alt_text"]}" loading="lazy"></div>')
+        alt_escaped = data["alt_text"].replace('"', '&quot;')
+        print(f'<div class="gallery-item" data-category="{data["category"]}"><img src="../Portfolio Selections/{filename}" alt="{alt_escaped}" loading="lazy"></div>')
 
 
 if __name__ == "__main__":
