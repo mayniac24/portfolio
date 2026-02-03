@@ -29,6 +29,64 @@
     <meta name="twitter:description" content="Capturing Life's Beautiful Moments">
     <meta name="twitter:image" content="images/20250927-DSC_0562.jpg">
 
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "ProfessionalService",
+        "name": "Mayniac Creations",
+        "description": "Professional photography in Colorado specializing in mountain portraits, weddings, elopements, maternity, and family photography.",
+        "url": "https://mayniac-portfolio.netlify.app/",
+        "image": "https://mayniac-portfolio.netlify.app/images/20250927-DSC_0562.jpg",
+        "priceRange": "$$",
+        "areaServed": {
+            "@type": "State",
+            "name": "Colorado"
+        },
+        "serviceType": [
+            "Wedding Photography",
+            "Portrait Photography",
+            "Maternity Photography",
+            "Family Photography",
+            "Elopement Photography"
+        ],
+        "hasOfferCatalog": {
+            "@type": "OfferCatalog",
+            "name": "Photography Services",
+            "itemListElement": [
+                {
+                    "@type": "Offer",
+                    "itemOffered": {
+                        "@type": "Service",
+                        "name": "Wedding Photography"
+                    }
+                },
+                {
+                    "@type": "Offer",
+                    "itemOffered": {
+                        "@type": "Service",
+                        "name": "Portrait Photography"
+                    }
+                },
+                {
+                    "@type": "Offer",
+                    "itemOffered": {
+                        "@type": "Service",
+                        "name": "Maternity Photography"
+                    }
+                },
+                {
+                    "@type": "Offer",
+                    "itemOffered": {
+                        "@type": "Service",
+                        "name": "Family Photography"
+                    }
+                }
+            ]
+        }
+    }
+    </script>
+
     <!-- Preload critical images (first 3 visible on load) -->
     <link rel="preload" as="image" href="images/20250927-DSC_0562.jpg">
     <link rel="preload" as="image" href="images/20250927-DSC_0668.jpg">
@@ -469,6 +527,126 @@
             z-index: 1001;
         }
 
+        .lightbox-caption {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            max-width: 80%;
+            text-align: center;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.8);
+            z-index: 1001;
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .lightbox-caption.visible {
+            opacity: 1;
+        }
+
+        .lightbox-share {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.3s, background 0.3s;
+            z-index: 1001;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            border: none;
+        }
+
+        .lightbox-share:hover {
+            opacity: 1;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .lightbox-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            z-index: 1000;
+            display: none;
+        }
+
+        .lightbox-loading.visible {
+            display: block;
+        }
+
+        @keyframes spin {
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        /* Testimonials */
+        .testimonials {
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        @media (min-width: 640px) {
+            .testimonials-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (min-width: 900px) {
+            .testimonials-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        .testimonial {
+            background: #1a1a1a;
+            padding: 30px;
+            border-radius: 4px;
+            border: 1px solid #333;
+        }
+
+        .testimonial-text {
+            color: #aaa;
+            font-style: italic;
+            line-height: 1.7;
+            margin-bottom: 20px;
+        }
+
+        .testimonial-author {
+            color: #fff;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+        }
+
+        .testimonial-role {
+            color: #666;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+
         /* Footer */
         footer {
             text-align: center;
@@ -628,6 +806,99 @@
             }
         }
 
+        /* Social links */
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .social-links a {
+            color: #555;
+            text-decoration: none;
+            font-size: 1.5rem;
+            transition: color 0.3s, transform 0.2s;
+        }
+
+        .social-links a:hover {
+            color: #fff;
+            transform: translateY(-2px);
+        }
+
+        /* Back to top button */
+        .back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s, background 0.3s;
+            z-index: 99;
+        }
+
+        .back-to-top.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .back-to-top:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Filter button count badge */
+        .filter-btn .count {
+            display: inline-block;
+            margin-left: 6px;
+            font-size: 0.7rem;
+            opacity: 0.6;
+        }
+
+        /* Gallery entrance animations */
+        .gallery-item {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .gallery-item.in-view {
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+
+        .gallery-item.loaded:not(.in-view) img {
+            opacity: 0;
+        }
+
+        /* Skip link for accessibility */
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            color: #0a0a0a;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            text-decoration: none;
+            z-index: 1000;
+            border-radius: 0 0 4px 4px;
+            transition: top 0.2s;
+        }
+
+        .skip-link:focus {
+            top: 0;
+            outline: none;
+        }
+
         @media print {
             nav, .lightbox, .filter-container, .contact-form {
                 display: none !important;
@@ -649,6 +920,8 @@
     </style>
 </head>
 <body>
+    <a href="#gallery" class="skip-link">Skip to gallery</a>
+
     <!-- Navigation -->
     <nav>
         <a href="#gallery" class="active">Gallery</a>
@@ -666,36 +939,152 @@
         <button class="filter-btn active" data-filter="all">All</button>
         <button class="filter-btn" data-filter="landscape">Landscapes</button>
         <button class="filter-btn" data-filter="portrait">Portraits</button>
-        <button class="filter-btn" data-filter="nature">Nature</button>
-        <button class="filter-btn" data-filter="urban">Urban</button>
+        <button class="filter-btn" data-filter="wedding">Wedding</button>
+        <button class="filter-btn" data-filter="maternity">Maternity</button>
+        <button class="filter-btn" data-filter="family">Family</button>
     </div>
 
     <!-- Gallery -->
     <main class="gallery" id="gallery">
         <!-- Landscape images span 2 columns, portrait images span 1 -->
-        <div class="gallery-item landscape" data-category="landscape"><img src="images/20250927-DSC_0209.jpg" alt="Expansive landscape at golden hour" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="urban"><img src="images/20250927-DSC_0424.jpg" alt="Urban architecture and city life" loading="lazy"></div>
-        <div class="gallery-item" data-category="portrait"><img src="images/20250927-DSC_0087.jpg" alt="Dramatic sky over natural landscape" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="urban"><img src="images/20250927-DSC_0505.jpg" alt="Architectural details and patterns" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="landscape"><img src="images/20250927-DSC_0562.jpg" alt="Scenic landscape view with dramatic lighting" loading="lazy"></div>
-        <div class="gallery-item" data-category="portrait"><img src="images/20250927-DSC_0319.jpg" alt="Wildlife in natural habitat" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="landscape"><img src="images/20250927-DSC_0590.jpg" alt="Majestic mountain landscape" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="nature"><img src="images/20250927-DSC_0668.jpg" alt="Natural scenery capturing the beauty of wildlife" loading="lazy"></div>
-        <div class="gallery-item" data-category="portrait"><img src="images/20250927-DSC_0618_BW.jpg" alt="Black and white urban photography" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="landscape"><img src="images/20260202-DSC_0056-1.jpg" alt="Lifestyle portrait in natural setting" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="landscape"><img src="images/20260202-DSC_0139-1.jpg" alt="Candid portrait moment" loading="lazy"></div>
-        <div class="gallery-item" data-category="portrait"><img src="images/20250927-DSC_0646.jpg" alt="Studio portrait with creative lighting" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="landscape"><img src="images/20260202-DSC_0197-1.jpg" alt="Panoramic vista with cloud formations" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="nature"><img src="images/20260202-DSC_0204-1.jpg" alt="Close-up nature photography" loading="lazy"></div>
-        <div class="gallery-item" data-category="portrait"><img src="images/20260202-DSC_0026-1.jpg" alt="Morning dew on natural elements" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="landscape"><img src="images/20260202-DSC_0231-1.jpg" alt="Environmental portrait with dramatic backdrop" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="nature"><img src="images/20260202-DSC_0292-1.jpg" alt="Flora and fauna detail shot" loading="lazy"></div>
-        <div class="gallery-item" data-category="portrait"><img src="images/20260202-DSC_0034-1.jpg" alt="Macro photography of natural textures" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="portrait"><img src="images/20260202-DSC_0341-1.jpg" alt="Portrait photography with natural lighting" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="landscape"><img src="images/20260202-DSC_0385-1.jpg" alt="Serene landscape with water reflection" loading="lazy"></div>
-        <div class="gallery-item" data-category="portrait"><img src="images/20260202-DSC_0069-1.jpg" alt="Night cityscape with ambient lighting" loading="lazy"></div>
-        <div class="gallery-item landscape" data-category="landscape"><img src="images/20260202-DSC_0413-1.jpg" alt="Sunset over rolling hills" loading="lazy"></div>
-        <div class="gallery-item" data-category="portrait"><img src="images/20260202-DSC_0574.jpg" alt="Street photography capturing urban energy" loading="lazy"></div>
+        <div class="gallery-item landscape" data-category="portrait landscape wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0209-400.webp 400w, images/20250927-DSC_0209-800.webp 800w, images/20250927-DSC_0209-1200.webp 1200w, images/20250927-DSC_0209.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20250927-DSC_0209.jpg" srcset="images/20250927-DSC_0209-400.jpg 400w, images/20250927-DSC_0209-800.jpg 800w, images/20250927-DSC_0209-1200.jpg 1200w, images/20250927-DSC_0209.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="Wedding couple poses by a stone chapel with mountains and sky in the background." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0424-400.webp 400w, images/20250927-DSC_0424-800.webp 800w, images/20250927-DSC_0424-1200.webp 1200w, images/20250927-DSC_0424.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20250927-DSC_0424.jpg" srcset="images/20250927-DSC_0424-400.jpg 400w, images/20250927-DSC_0424-800.jpg 800w, images/20250927-DSC_0424-1200.jpg 1200w, images/20250927-DSC_0424.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="Bride and groom pose for a wedding photo against a mountainous landscape." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item" data-category="portrait landscape wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0087-400.webp 400w, images/20250927-DSC_0087-800.webp 800w, images/20250927-DSC_0087-1200.webp 1200w, images/20250927-DSC_0087.webp 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw">
+                <img src="images/20250927-DSC_0087.jpg" srcset="images/20250927-DSC_0087-400.jpg 400w, images/20250927-DSC_0087-800.jpg 800w, images/20250927-DSC_0087-1200.jpg 1200w, images/20250927-DSC_0087.jpg 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw" alt="A bride and groom stand on a rock with mountain scenery in the background." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0505-400.webp 400w, images/20250927-DSC_0505-800.webp 800w, images/20250927-DSC_0505-1200.webp 1200w, images/20250927-DSC_0505.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20250927-DSC_0505.jpg" srcset="images/20250927-DSC_0505-400.jpg 400w, images/20250927-DSC_0505-800.jpg 800w, images/20250927-DSC_0505-1200.jpg 1200w, images/20250927-DSC_0505.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="A couple in wedding attire poses on a wooden bridge with snow-capped mountains and autumn foliage." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0562-400.webp 400w, images/20250927-DSC_0562-800.webp 800w, images/20250927-DSC_0562-1200.webp 1200w, images/20250927-DSC_0562.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20250927-DSC_0562.jpg" srcset="images/20250927-DSC_0562-400.jpg 400w, images/20250927-DSC_0562-800.jpg 800w, images/20250927-DSC_0562-1200.jpg 1200w, images/20250927-DSC_0562.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="Couple in formal attire stands on a dock overlooking a scenic lake with mountains." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item" data-category="portrait wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0319-400.webp 400w, images/20250927-DSC_0319-800.webp 800w, images/20250927-DSC_0319-1200.webp 1200w, images/20250927-DSC_0319.webp 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw">
+                <img src="images/20250927-DSC_0319.jpg" srcset="images/20250927-DSC_0319-400.jpg 400w, images/20250927-DSC_0319-800.jpg 800w, images/20250927-DSC_0319-1200.jpg 1200w, images/20250927-DSC_0319.jpg 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw" alt="A bride and groom pose for their wedding photos in front of a stone church with a cross." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0590-400.webp 400w, images/20250927-DSC_0590-800.webp 800w, images/20250927-DSC_0590-1200.webp 1200w, images/20250927-DSC_0590.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20250927-DSC_0590.jpg" srcset="images/20250927-DSC_0590-400.jpg 400w, images/20250927-DSC_0590-800.jpg 800w, images/20250927-DSC_0590-1200.jpg 1200w, images/20250927-DSC_0590.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="A couple poses for a portrait in front of autumn trees and snow-capped mountains." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0668-400.webp 400w, images/20250927-DSC_0668-800.webp 800w, images/20250927-DSC_0668-1200.webp 1200w, images/20250927-DSC_0668.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20250927-DSC_0668.jpg" srcset="images/20250927-DSC_0668-400.jpg 400w, images/20250927-DSC_0668-800.jpg 800w, images/20250927-DSC_0668-1200.jpg 1200w, images/20250927-DSC_0668.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="A couple poses by a lake with a forested mountain in the background." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item" data-category="portrait landscape wedding bw">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0618_BW-400.webp 400w, images/20250927-DSC_0618_BW-800.webp 800w, images/20250927-DSC_0618_BW-1200.webp 1200w, images/20250927-DSC_0618_BW.webp 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw">
+                <img src="images/20250927-DSC_0618_BW.jpg" srcset="images/20250927-DSC_0618_BW-400.jpg 400w, images/20250927-DSC_0618_BW-800.jpg 800w, images/20250927-DSC_0618_BW-1200.jpg 1200w, images/20250927-DSC_0618_BW.jpg 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw" alt="Black and white portrait of a woman in a wedding dress with mountains and forest behind her." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape maternity">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0056-1-400.webp 400w, images/20260202-DSC_0056-1-800.webp 800w, images/20260202-DSC_0056-1-1200.webp 1200w, images/20260202-DSC_0056-1.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20260202-DSC_0056-1.jpg" srcset="images/20260202-DSC_0056-1-400.jpg 400w, images/20260202-DSC_0056-1-800.jpg 800w, images/20260202-DSC_0056-1-1200.jpg 1200w, images/20260202-DSC_0056-1.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="Pregnant woman posing in a scenic mountain forest during golden hour." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape maternity family">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0139-1-400.webp 400w, images/20260202-DSC_0139-1-800.webp 800w, images/20260202-DSC_0139-1-1200.webp 1200w, images/20260202-DSC_0139-1.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20260202-DSC_0139-1.jpg" srcset="images/20260202-DSC_0139-1-400.jpg 400w, images/20260202-DSC_0139-1-800.jpg 800w, images/20260202-DSC_0139-1-1200.jpg 1200w, images/20260202-DSC_0139-1.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="A woman and child stand in a golden field at sunset with mountains in the distance." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item" data-category="portrait landscape wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20250927-DSC_0646-400.webp 400w, images/20250927-DSC_0646-800.webp 800w, images/20250927-DSC_0646-1200.webp 1200w, images/20250927-DSC_0646.webp 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw">
+                <img src="images/20250927-DSC_0646.jpg" srcset="images/20250927-DSC_0646-400.jpg 400w, images/20250927-DSC_0646-800.jpg 800w, images/20250927-DSC_0646-1200.jpg 1200w, images/20250927-DSC_0646.jpg 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw" alt="A man in a blue suit stands outdoors with autumn trees and snow-capped mountains behind him." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape maternity">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0197-1-400.webp 400w, images/20260202-DSC_0197-1-800.webp 800w, images/20260202-DSC_0197-1-1200.webp 1200w, images/20260202-DSC_0197-1.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20260202-DSC_0197-1.jpg" srcset="images/20260202-DSC_0197-1-400.jpg 400w, images/20260202-DSC_0197-1-800.jpg 800w, images/20260202-DSC_0197-1-1200.jpg 1200w, images/20260202-DSC_0197-1.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="A pregnant woman in a green dress stands in a field with mountains and forest in the background." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape maternity">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0204-1-400.webp 400w, images/20260202-DSC_0204-1-800.webp 800w, images/20260202-DSC_0204-1-1200.webp 1200w, images/20260202-DSC_0204-1.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20260202-DSC_0204-1.jpg" srcset="images/20260202-DSC_0204-1-400.jpg 400w, images/20260202-DSC_0204-1-800.jpg 800w, images/20260202-DSC_0204-1-1200.jpg 1200w, images/20260202-DSC_0204-1.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="A pregnant woman in a green dress poses in a scenic mountain landscape with forests and open fields." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item" data-category="portrait landscape maternity">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0026-1-400.webp 400w, images/20260202-DSC_0026-1-800.webp 800w, images/20260202-DSC_0026-1-1200.webp 1200w, images/20260202-DSC_0026-1.webp 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw">
+                <img src="images/20260202-DSC_0026-1.jpg" srcset="images/20260202-DSC_0026-1-400.jpg 400w, images/20260202-DSC_0026-1-800.jpg 800w, images/20260202-DSC_0026-1-1200.jpg 1200w, images/20260202-DSC_0026-1.jpg 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw" alt="Pregnant woman posing among trees and rock formations in a scenic outdoor setting." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape maternity family">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0231-1-400.webp 400w, images/20260202-DSC_0231-1-800.webp 800w, images/20260202-DSC_0231-1-1200.webp 1200w, images/20260202-DSC_0231-1.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20260202-DSC_0231-1.jpg" srcset="images/20260202-DSC_0231-1-400.jpg 400w, images/20260202-DSC_0231-1-800.jpg 800w, images/20260202-DSC_0231-1-1200.jpg 1200w, images/20260202-DSC_0231-1.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="Pregnant woman and young child stand in a sunlit meadow with mountains in the distance." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape maternity">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0292-1-400.webp 400w, images/20260202-DSC_0292-1-800.webp 800w, images/20260202-DSC_0292-1-1200.webp 1200w, images/20260202-DSC_0292-1.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20260202-DSC_0292-1.jpg" srcset="images/20260202-DSC_0292-1-400.jpg 400w, images/20260202-DSC_0292-1-800.jpg 800w, images/20260202-DSC_0292-1-1200.jpg 1200w, images/20260202-DSC_0292-1.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="Pregnant woman in a green dress stands in an open field at sunset with mountains and dramatic sky behind her." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item" data-category="portrait landscape maternity">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0034-1-400.webp 400w, images/20260202-DSC_0034-1-800.webp 800w, images/20260202-DSC_0034-1-1200.webp 1200w, images/20260202-DSC_0034-1.webp 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw">
+                <img src="images/20260202-DSC_0034-1.jpg" srcset="images/20260202-DSC_0034-1-400.jpg 400w, images/20260202-DSC_0034-1-800.jpg 800w, images/20260202-DSC_0034-1-1200.jpg 1200w, images/20260202-DSC_0034-1.jpg 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw" alt="A pregnant woman poses outdoors near rocks and trees with mountains in the background." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape maternity">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0341-1-400.webp 400w, images/20260202-DSC_0341-1-800.webp 800w, images/20260202-DSC_0341-1-1200.webp 1200w, images/20260202-DSC_0341-1.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20260202-DSC_0341-1.jpg" srcset="images/20260202-DSC_0341-1-400.jpg 400w, images/20260202-DSC_0341-1-800.jpg 800w, images/20260202-DSC_0341-1-1200.jpg 1200w, images/20260202-DSC_0341-1.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="Pregnant woman in a green dress poses outdoors during sunset with mountainous scenery." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape maternity family">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0385-1-400.webp 400w, images/20260202-DSC_0385-1-800.webp 800w, images/20260202-DSC_0385-1-1200.webp 1200w, images/20260202-DSC_0385-1.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20260202-DSC_0385-1.jpg" srcset="images/20260202-DSC_0385-1-400.jpg 400w, images/20260202-DSC_0385-1-800.jpg 800w, images/20260202-DSC_0385-1-1200.jpg 1200w, images/20260202-DSC_0385-1.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="Pregnant woman and child holding hands in a field during sunset with mountain range." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item" data-category="portrait landscape maternity">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0069-1-400.webp 400w, images/20260202-DSC_0069-1-800.webp 800w, images/20260202-DSC_0069-1-1200.webp 1200w, images/20260202-DSC_0069-1.webp 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw">
+                <img src="images/20260202-DSC_0069-1.jpg" srcset="images/20260202-DSC_0069-1-400.jpg 400w, images/20260202-DSC_0069-1-800.jpg 800w, images/20260202-DSC_0069-1-1200.jpg 1200w, images/20260202-DSC_0069-1.jpg 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw" alt="Pregnant woman in a floral dress poses against rocky mountains and trees." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item landscape" data-category="portrait landscape maternity">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0413-1-400.webp 400w, images/20260202-DSC_0413-1-800.webp 800w, images/20260202-DSC_0413-1-1200.webp 1200w, images/20260202-DSC_0413-1.webp 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+                <img src="images/20260202-DSC_0413-1.jpg" srcset="images/20260202-DSC_0413-1-400.jpg 400w, images/20260202-DSC_0413-1-800.jpg 800w, images/20260202-DSC_0413-1-1200.jpg 1200w, images/20260202-DSC_0413-1.jpg 6016w" sizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw" alt="Pregnant woman in a green dress stands in a field with mountains and a colorful sunset sky." loading="lazy">
+            </picture>
+        </div>
+        <div class="gallery-item" data-category="portrait landscape wedding">
+            <picture>
+                <source type="image/webp" srcset="images/20260202-DSC_0574-400.webp 400w, images/20260202-DSC_0574-800.webp 800w, images/20260202-DSC_0574-1200.webp 1200w, images/20260202-DSC_0574.webp 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw">
+                <img src="images/20260202-DSC_0574.jpg" srcset="images/20260202-DSC_0574-400.jpg 400w, images/20260202-DSC_0574-800.jpg 800w, images/20260202-DSC_0574-1200.jpg 1200w, images/20260202-DSC_0574.jpg 4000w" sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw" alt="Couple walks hand-in-hand along a path through autumn foliage toward mountainous scenery." loading="lazy">
+            </picture>
+        </div>
     </main>
 
     <!-- About Section -->
@@ -745,15 +1134,49 @@
     </section>
 
     <footer>
-        <p>&copy; 2025 Photography Portfolio. All rights reserved.</p>
+        <p>&copy; 2026 Mayniac Creations. All rights reserved.</p>
+        <div class="social-links">
+            <a href="https://www.instagram.com/mayniac_creations" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+            </a>
+            <a href="https://www.facebook.com/evan.maynard.79" target="_blank" rel="noopener noreferrer" aria-label="Facebook">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/></svg>
+            </a>
+            <a href="https://x.com/mayniac_art" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </a>
+            <a href="https://www.youtube.com/@Mayniac_Creations" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+            </a>
+            <a href="https://pin.it/5ij1hHPUU" target="_blank" rel="noopener noreferrer" aria-label="Pinterest">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.627 0-12 5.372-12 12 0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738.098.119.112.224.083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.631-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146 1.124.347 2.317.535 3.554.535 6.627 0 12-5.373 12-12 0-6.628-5.373-12-12-12z"/></svg>
+            </a>
+            <a href="https://www.patreon.com/Mayniac" target="_blank" rel="noopener noreferrer" aria-label="Patreon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M14.82 2.41c3.96 0 7.18 3.24 7.18 7.21 0 3.96-3.22 7.18-7.18 7.18-3.97 0-7.21-3.22-7.21-7.18 0-3.97 3.24-7.21 7.21-7.21M2 21.6h3.5V2.41H2V21.6z"/></svg>
+            </a>
+            <a href="https://www.etsy.com/shop/mayniacbydesign" target="_blank" rel="noopener noreferrer" aria-label="Etsy Shop">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 4h11v2H9v4h8v2H9v4h10v2H8z"/></svg>
+            </a>
+            <a href="mailto:mayniacbydesign@outlook.com" aria-label="Email">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3v18h24v-18h-24zm21.518 2l-9.518 7.713-9.518-7.713h19.036zm-19.518 14v-11.817l10 8.104 10-8.104v11.817h-20z"/></svg>
+            </a>
+        </div>
     </footer>
+
+    <!-- Back to top button -->
+    <button class="back-to-top" id="back-to-top" aria-label="Back to top">&#8593;</button>
 
     <!-- Lightbox -->
     <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Image viewer">
+        <button class="lightbox-share" id="lightbox-share" aria-label="Share image">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>
+        </button>
         <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close image viewer">&times;</button>
         <button class="lightbox-nav lightbox-prev" onclick="changeImage(-1)" aria-label="Previous image">&#10094;</button>
+        <div class="lightbox-loading" id="lightbox-loading"></div>
         <img src="" alt="Enlarged photo" id="lightbox-img">
         <button class="lightbox-nav lightbox-next" onclick="changeImage(1)" aria-label="Next image">&#10095;</button>
+        <div class="lightbox-caption" id="lightbox-caption"></div>
         <div class="lightbox-counter" id="lightbox-counter" aria-live="polite"></div>
     </div>
 
@@ -769,14 +1192,15 @@
 
         // ===== IMAGE LOADING STATE =====
         document.querySelectorAll('.gallery-item img').forEach(img => {
+            const galleryItem = img.closest('.gallery-item');
             if (img.complete) {
-                img.parentElement.classList.add('loaded');
+                galleryItem.classList.add('loaded');
             } else {
                 img.addEventListener('load', () => {
-                    img.parentElement.classList.add('loaded');
+                    galleryItem.classList.add('loaded');
                 });
                 img.addEventListener('error', () => {
-                    img.parentElement.classList.add('loaded');
+                    galleryItem.classList.add('loaded');
                 });
             }
         });
@@ -795,9 +1219,10 @@
                 filterBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
 
-                // Filter gallery items
+                // Filter gallery items (supports multiple space-separated tags)
                 galleryItems.forEach(item => {
-                    if (filter === 'all' || item.dataset.category === filter) {
+                    const categories = item.dataset.category.split(' ');
+                    if (filter === 'all' || categories.includes(filter)) {
                         item.classList.remove('hidden');
                     } else {
                         item.classList.add('hidden');
@@ -813,6 +1238,9 @@
         const lightbox = document.getElementById('lightbox');
         const lightboxImg = document.getElementById('lightbox-img');
         const lightboxCounter = document.getElementById('lightbox-counter');
+        const lightboxCaption = document.getElementById('lightbox-caption');
+        const lightboxLoading = document.getElementById('lightbox-loading');
+        const lightboxShare = document.getElementById('lightbox-share');
         let visibleItems = [];
         let currentIndex = 0;
         let lastFocusedElement = null;
@@ -826,17 +1254,64 @@
             lightboxCounter.textContent = `${currentIndex + 1} / ${visibleItems.length}`;
         }
 
+        function updateCaption(alt) {
+            if (alt && alt !== 'Enlarged photo') {
+                lightboxCaption.textContent = alt;
+                lightboxCaption.classList.add('visible');
+            } else {
+                lightboxCaption.classList.remove('visible');
+            }
+        }
+
+        function showLoading() {
+            lightboxLoading.classList.add('visible');
+        }
+
+        function hideLoading() {
+            lightboxLoading.classList.remove('visible');
+        }
+
         function openLightbox(index) {
             lastFocusedElement = document.activeElement;
             currentIndex = index;
             const img = visibleItems[index].querySelector('img');
+            showLoading();
             lightboxImg.src = img.src;
             lightboxImg.alt = img.alt;
             updateCounter();
+            updateCaption(img.alt);
             lightbox.classList.add('active');
             document.body.style.overflow = 'hidden';
             setTimeout(() => lightbox.querySelector('.lightbox-close').focus(), 100);
         }
+
+        lightboxImg.addEventListener('load', hideLoading);
+        lightboxImg.addEventListener('error', hideLoading);
+
+        // Share functionality
+        lightboxShare.addEventListener('click', async () => {
+            const shareData = {
+                title: 'Photography Portfolio',
+                text: lightboxImg.alt,
+                url: window.location.href
+            };
+
+            if (navigator.share) {
+                try {
+                    await navigator.share(shareData);
+                } catch (err) {
+                    // User cancelled or error
+                }
+            } else {
+                // Fallback: copy URL to clipboard
+                try {
+                    await navigator.clipboard.writeText(window.location.href);
+                    alert('Link copied to clipboard!');
+                } catch (err) {
+                    // Clipboard failed
+                }
+            }
+        });
 
         galleryItems.forEach((item) => {
             item.setAttribute('tabindex', '0');
@@ -867,9 +1342,11 @@
             if (currentIndex >= visibleItems.length) currentIndex = 0;
             if (currentIndex < 0) currentIndex = visibleItems.length - 1;
             const img = visibleItems[currentIndex].querySelector('img');
+            showLoading();
             lightboxImg.src = img.src;
             lightboxImg.alt = img.alt;
             updateCounter();
+            updateCaption(img.alt);
         }
 
         // Keyboard navigation
@@ -963,6 +1440,74 @@
             submitBtn.disabled = false;
             submitBtn.textContent = 'Send Message';
         });
+
+        // ===== BACK TO TOP BUTTON =====
+        const backToTop = document.getElementById('back-to-top');
+
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 500) {
+                backToTop.classList.add('visible');
+            } else {
+                backToTop.classList.remove('visible');
+            }
+        });
+
+        backToTop.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        // ===== GALLERY ENTRANCE ANIMATIONS =====
+        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            const observerOptions = {
+                root: null,
+                rootMargin: '0px',
+                threshold: 0.1
+            };
+
+            const galleryObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry, index) => {
+                    if (entry.isIntersecting) {
+                        // Stagger the animation slightly
+                        setTimeout(() => {
+                            entry.target.classList.add('in-view');
+                        }, index * 50);
+                        galleryObserver.unobserve(entry.target);
+                    }
+                });
+            }, observerOptions);
+
+            galleryItems.forEach(item => {
+                galleryObserver.observe(item);
+            });
+        } else {
+            // If reduced motion, show all items immediately
+            galleryItems.forEach(item => item.classList.add('in-view'));
+        }
+
+        // ===== FILTER COUNT BADGES =====
+        function updateFilterCounts() {
+            filterBtns.forEach(btn => {
+                const filter = btn.dataset.filter;
+                let count;
+                if (filter === 'all') {
+                    count = galleryItems.length;
+                } else {
+                    count = Array.from(galleryItems).filter(item =>
+                        item.dataset.category.split(' ').includes(filter)
+                    ).length;
+                }
+
+                // Add or update count span
+                let countSpan = btn.querySelector('.count');
+                if (!countSpan) {
+                    countSpan = document.createElement('span');
+                    countSpan.className = 'count';
+                    btn.appendChild(countSpan);
+                }
+                countSpan.textContent = `(${count})`;
+            });
+        }
+        updateFilterCounts();
     </script>
 </body>
 </html>
