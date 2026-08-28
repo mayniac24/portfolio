@@ -112,8 +112,10 @@ Verify Netlify is building before disabling Pages.
 - `optimize_images.py`: `SIZES = [400, 800, 1200, 2000]`.
 - Grid: remove the original from every `srcset`. Largest candidate is 2000w. The `src`
   fallback points at `-1200.jpg`, never the original.
-- Lightbox: replace `lightboxImg.src = img.src` with an explicit lookup of the 2000w
-  variant, preferring WebP.
+- Lightbox: replace `lightboxImg.src = img.src` with an explicit lookup of the largest
+  available variant at or below 2000w, preferring WebP. Not every original exceeds
+  2000px and `optimize_images.py` must not upscale, so the lookup resolves against the
+  `variants` list in `gallery.json` rather than assuming a 2000w file exists.
 
 Worst-case image fetch drops from ~8MB to roughly 300-500KB.
 
@@ -177,7 +179,9 @@ and non-destructive.
 
 - Bump the cache name to `portfolio-v2` as part of the release, and make HTML
   **network-first** so future deploys are never masked by a stale cache (F4).
-- Restrict image caching to the derived variants; never cache originals.
+- Restrict image caching to the derived variants. Section 5 already removes originals
+  from the deploy, so this is defense-in-depth rather than the primary fix: it keeps a
+  stray full-resolution request from ever being written to a visitor device again.
 
 ### 7. Forms
 
