@@ -142,7 +142,8 @@ empty, and CLAUDE.md already documents it as the intended source location.
 
 Must land **after** sections 1 and 2, since those are what stop the site referencing
 originals. `images/` then retains only derived variants and the working tree drops to
-roughly 35MB. Git history is left intact by decision, so a fresh clone stays ~410MB —
+roughly 40-60MB — the added 2000w tier is the largest remaining contributor, so this is
+above the naive estimate. Git history is left intact by decision, so a fresh clone stays ~410MB —
 acceptable for a static site and non-destructive.
 
 ### 4. Hosting cutover
