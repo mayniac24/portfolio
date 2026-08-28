@@ -92,12 +92,60 @@ written; only `rel="canonical"` is absent.
 
 - No visual redesign. Layout, palette, and typography stay as they are.
 - No lead-gen features (booking, pricing pages, CRM, analytics funnels).
+- **No forms migration.** Formspree stays as-is. It works today, and replacing a working
+  integration is not worth the churn in this pass.
 - No custom domain purchase. The design must not obstruct adding one later.
 - No git history rewrite.
 
 ## Design
 
-### 1. Hosting cutover
+### 1. Image delivery
+
+The highest-value change, and it ships first.
+
+- `optimize_images.py`: `SIZES = [400, 800, 1200, 2000]`. Regenerate variants. Never
+  upscale — an original below a breakpoint simply does not get that variant.
+- **Lightbox (F1):** replace `lightboxImg.src = img.src` with a read of a new
+  `data-lightbox-src` attribute on each thumbnail, pointing at the largest available
+  variant at or below 2000w, WebP preferred with a JPEG sibling for fallback.
+
+  This attribute is the interim source of truth because `gallery.json` does not exist
+  until section 3. When it does, `build.py` generates the identical attribute from the
+  `variants` list, so the lightbox JS never changes again.
+- **Grid (F2):** remove the original from every `srcset`; largest candidate becomes
+  2000w. The `src` fallback points at `-1200.jpg`, never the original.
+- Add `width`/`height` to every `<img>` to fix cumulative layout shift. Until
+  `gallery.json` exists these come from reading the files with Pillow.
+- Ship with the service worker changes in section 2, or returning visitors see none of it.
+
+Worst-case image fetch drops from ~8MB to roughly 300-500KB.
+
+**Cost of ordering this first:** the srcset, `width`/`height`, and `data-lightbox-src`
+edits land in `index.html` via a one-off script, and section 4 later regenerates that
+markup from a template. This is not wasted work — the hand-edited output defines the
+exact target the template must reproduce, and gives the section 4 tests something real
+to diff against.
+
+### 2. Service worker
+
+- Bump the cache name to `portfolio-v2`, and make HTML **network-first** so this deploy
+  and every future one are never masked by a stale cache (F4).
+- Restrict image caching to the derived variants. Section 5 removes originals from the
+  deploy anyway, so this is defense-in-depth: it keeps a stray full-resolution request
+  from ever being written to a visitor device again.
+
+### 3. Originals relocation
+
+Originals (46 files, ~200MB of the 221MB `images/` folder) move to
+`M:\Photos & Videos\Portfolio Selections`. That directory already exists, is currently
+empty, and CLAUDE.md already documents it as the intended source location.
+
+Must land **after** sections 1 and 2, since those are what stop the site referencing
+originals. `images/` then retains only derived variants and the working tree drops to
+roughly 35MB. Git history is left intact by decision, so a fresh clone stays ~410MB —
+acceptable for a static site and non-destructive.
+
+### 4. Hosting cutover
 
 - Add `netlify.toml`: no build command, `publish = "."`, long-lived cache headers for
   `images/*`, short cache for `index.html`.
@@ -107,19 +155,7 @@ written; only `rel="canonical"` is absent.
 
 Verify Netlify is building before disabling Pages.
 
-### 2. Image delivery
-
-- `optimize_images.py`: `SIZES = [400, 800, 1200, 2000]`.
-- Grid: remove the original from every `srcset`. Largest candidate is 2000w. The `src`
-  fallback points at `-1200.jpg`, never the original.
-- Lightbox: replace `lightboxImg.src = img.src` with an explicit lookup of the largest
-  available variant at or below 2000w, preferring WebP. Not every original exceeds
-  2000px and `optimize_images.py` must not upscale, so the lookup resolves against the
-  `variants` list in `gallery.json` rather than assuming a 2000w file exists.
-
-Worst-case image fetch drops from ~8MB to roughly 300-500KB.
-
-### 3. Taxonomy
+### 5. Taxonomy
 
 Two orthogonal axes, no shared vocabulary:
 
@@ -134,7 +170,7 @@ select exactly one session type from an explicit list and to never emit orientat
 words — that missing constraint is what produced F3. **The generated mapping is reviewed
 by the owner before it lands.**
 
-### 4. Data model and build pipeline
+### 6. Data model and build pipeline
 
 `data/gallery.json` becomes the single source of truth:
 
@@ -154,42 +190,19 @@ by the owner before it lands.**
 Responsibilities split cleanly:
 
 - `optimize_images.py` — writes derived variants, records true `width`/`height`
-- `auto_categorize.py` — writes **only** `gallery.json`, never touches HTML
-- `build.py` — renders `index.html` from a Jinja2 template
+- `auto_categorize.py` — writes **only** `gallery.json`, never touches HTML. Its dead
+  `M:\Photography\...` paths are repaired here (F5).
+- `build.py` — renders `index.html` from a Jinja2 template, reproducing exactly the
+  markup section 1 established by hand
 
 This ends the regex-surgery-on-HTML approach, which is fragile and is what makes the
-current script risky to run. Carrying `width`/`height` from JSON into every `<img>` also
-fixes cumulative layout shift as a side effect.
+current script risky to run.
 
 Adding a photo becomes: drop the file, run `python build.py`, commit, Netlify deploys.
 
 Add a `requirements.txt` (`pillow`, `requests`, `jinja2`); the repo currently has none.
 
-### 5. Originals relocation
-
-Originals (46 files, ~200MB of the 221MB `images/` folder) move to
-`M:\Photos & Videos\Portfolio Selections`. That directory already exists, is currently
-empty, and CLAUDE.md already documents it as the intended source location.
-
-`images/` retains only derived variants. Working tree drops to roughly 35MB. Git history
-is left intact by decision, so a fresh clone stays ~410MB — acceptable for a static site
-and non-destructive.
-
-### 6. Service worker
-
-- Bump the cache name to `portfolio-v2` as part of the release, and make HTML
-  **network-first** so future deploys are never masked by a stale cache (F4).
-- Restrict image caching to the derived variants. Section 5 already removes originals
-  from the deploy, so this is defense-in-depth rather than the primary fix: it keeps a
-  stray full-resolution request from ever being written to a visitor device again.
-
-### 7. Forms
-
-Formspree to Netlify Forms: `data-netlify="true"`, hidden `form-name` field, honeypot
-field, plus a success state (redirect page or JS handler). Removes a third-party
-dependency and its free-tier cap.
-
-### 8. Structure and metadata
+### 7. Structure and metadata
 
 - Extract `css/styles.css` and `js/main.js`. `index.html` becomes ~150 lines of structure
   plus a generated gallery block.
@@ -205,29 +218,32 @@ dependency and its free-tier cap.
 
 ## Testing
 
-- `build.py` unit tests: `gallery.json` to expected HTML fragment.
-- Asset checker: every variant referenced by the generated HTML exists on disk.
-- Regression guard: assert no `srcset` entry exceeds 2000w, and that no `src` or lightbox
-  target resolves to an original. This is the test that keeps F1/F2 from returning.
+- **Regression guard (highest value):** assert no `srcset` entry exceeds 2000w, and that
+  no `src` or `data-lightbox-src` resolves to an original. This is the test that keeps
+  F1/F2 from returning, and it must be written in phase 1 against the hand-edited HTML.
+- Asset checker: every variant referenced by the HTML exists on disk.
+- `build.py` unit tests: `gallery.json` to expected HTML fragment. The phase 1 output is
+  the fixture — the template must reproduce it byte-for-byte modulo whitespace.
 - Taxonomy check: every entry has exactly one session value; no entry uses an orientation
   word as a session.
 - Lighthouse before/after on the deployed Netlify URL.
 
 ## Phasing
 
-1. **Hosting cutover** — low risk, unblocks the rest.
-2. **Image delivery (F1, F2) and service worker (F4)** — the largest user-visible win.
-   Ship early. F4 must ship with or before anything else, or returning visitors see
-   nothing change.
+1. **Image delivery + service worker (F1, F2, F4)** — the largest user-visible win, and
+   the service worker fix must ride along or returning visitors see nothing change.
+   Then relocate originals.
+2. **Hosting cutover (F6 canonical)** — retire Pages, add `netlify.toml`.
 3. **Data model, build pipeline, taxonomy re-tag (F3, F5).**
-4. **Forms, structure split, metadata, CLAUDE.md (F6).**
+4. **Structure split, metadata, CLAUDE.md (F6).**
 
 ## Risks
 
+- The service worker fix must ship in phase 1. If image fixes land without it, returning
+  visitors keep the cached old page and the work looks like it did nothing.
+- Relocating originals before the srcset and lightbox fixes are deployed would break the
+  live site. Order within phase 1 matters.
 - Disabling Pages before confirming Netlify builds would take the site offline. Verify first.
 - The re-tagging pass is model-generated and needs owner review before it lands.
-- Netlify Forms requires the form markup to be present in the deployed HTML at build
-  time. It is static, so this holds, but it must be re-verified after templating since
-  `build.py` will be generating that markup.
 - Moving originals out of `images/` breaks any external link to a full-resolution file.
   No such links are known in-repo; worth a check before the move.
