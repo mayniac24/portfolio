@@ -78,14 +78,26 @@ def desaturate(rgb: np.ndarray) -> tuple[np.ndarray, float]:
 
 
 def process(src: Path, dst: Path, review_dir: Path | None = None) -> str:
-    rgb = np.asarray(Image.open(src).convert("RGB"), dtype=np.float64)
+    original = Image.open(src)
+    # Carry EXIF across. Pillow drops it silently on save, and an earlier
+    # version of this script therefore stripped camera, lens and capture date
+    # from every corrected master. With the RAWs gone those masters are the
+    # only originals left, so losing their metadata is not recoverable.
+    exif = original.info.get("exif")
+    icc = original.info.get("icc_profile")
+    rgb = np.asarray(original.convert("RGB"), dtype=np.float64)
     rgb, gains = white_balance(rgb)
     rgb, shift = black_point(rgb)
     rgb, satf = desaturate(rgb)
 
     out = Image.fromarray(rgb.astype(np.uint8), "RGB")
     dst.parent.mkdir(parents=True, exist_ok=True)
-    out.save(dst, "JPEG", quality=95, subsampling=0)
+    save_kw = {"quality": 95, "subsampling": 0}
+    if exif:
+        save_kw["exif"] = exif
+    if icc:
+        save_kw["icc_profile"] = icc
+    out.save(dst, "JPEG", **save_kw)
 
     if review_dir:
         review_dir.mkdir(parents=True, exist_ok=True)

@@ -147,9 +147,6 @@ noisy sky was avoidable in camera.
    only in part. Needs the picker.
 4. **`auto_categorize.py`** still has dead `M:\Photography\...` paths and
    uncommitted local changes. Should be rewritten to emit `gallery.json` only.
-5. **Watermark.** Every published image carries a white script wordmark bottom
-   right; the 8 new landscapes do not, so the set is now inconsistent.
-   Recommendation was to remove them site-wide. Undecided.
 6. **Three lightbox images exceed 1MB** (`0026`, `0034`, `0069`). Dropping WebP
    quality to 80 on the 2000w tier would fix it.
 
@@ -189,3 +186,77 @@ for Plex and Syncthing. The workflow's own cron is left as a harmless fallback;
 
 **Generalise:** never put anything time-sensitive on a GitHub `schedule` trigger.
 Drive it externally and dispatch.
+
+
+---
+
+## Watermarks removed; rights embedded instead
+
+**Decided 2026-08-29 by the owner**, after asking how to stop people stealing
+the work. Watermarks are gone from all 31 published photos.
+
+The reasoning, not just the outcome. A corner wordmark deters casual reposting
+and nothing else -- generative fill erases one in seconds and it does nothing
+against a screenshot -- while being the most common visual tell of an amateur
+portfolio. What actually protects the work, in order:
+
+1. **Resolution limiting.** Already in place: nothing above 2000px wide is
+   deployed and originals are not on the server. A web copy cannot be printed
+   large or licensed.
+2. **Embedded rights.** Now on all 248 deployed files: EXIF `Copyright` and
+   `Artist`, plus XMP `dc:creator`, `dc:rights` and `xmpRights:WebStatement` on
+   WebP. Invisible, survives reposting, gives provenance.
+3. **Copyright registration.** Not done, and the only thing with real teeth --
+   without it you are limited to actual damages. ~$65 for a batch.
+4. Reverse-image monitoring.
+
+`optimize_images.py` writes a **minimal fresh** metadata block rather than
+copying source EXIF, so GPS never reaches the web. `tests/test_rights.py`
+guards all of this, including that no GPS is published.
+
+### How the watermarks came off
+
+Not by inpainting. Unwatermarked originals existed in the library
+(`_Professional Work/` for the elopement, `Hiking/2025/Estes Park, August 2025/`
+for the maternity set) but were *less graded* -- using them directly would have
+discarded the owner's colour work.
+
+`tools/dewatermark.py` instead fits a per-channel LUT from the clean original to
+the graded export using only pixels **outside** the watermark region, then
+applies it to the clean file. The result carries the grade and never had a mark.
+Verified per photo by residual: the maternity set recovered 27-82% of the grade
+(residual 28 -> 4), the elopement set needed almost nothing (residual already
+0.5-2.7, i.e. JPEG noise). Sources recorded in `data/watermark_sources.json`.
+
+Filename matching alone was not enough -- `DSC_0087` matches 44 files in this
+library. Matching used basename + capture timestamp + dimensions, then content
+correlation.
+
+---
+
+## The 20260202- filenames are wrong, and capture dates were recovered
+
+The maternity photos carry a `20260202-` prefix taken from a **Lightroom export
+timestamp**, five months after the shoot. Their EXIF had been stripped of
+`DateTimeOriginal` entirely.
+
+Content-matching each export against the camera originals in
+`Estes Park, August 2025 - Big Camera/` recovered exact capture times for 7 of
+12, all on **2025-08-20** between 19:15 and 19:57. The other 5 could not be
+matched above 0.85 correlation and were left as year-only rather than guessed.
+
+Two traps worth remembering:
+- The same-numbered original is often a **different photograph**. `DSC_0056` and
+  `DSC_0139` correlated at 0.28-0.36. A naive filename lookup also dated
+  `DSC_0292` to 08-18 06:08 when the content-matched frame is 08-20 19:32.
+- Portrait frames need rotation-invariant comparison; the stripped exports carry
+  no orientation tag.
+
+True dates now live in `data/gallery.json` as `captured`, and
+`optimize_images.py` prefers that over the filename when building the copyright
+notice -- otherwise it would assert 2026 for photographs taken in 2025, which on
+a registered work is a real problem.
+
+**Still open:** the filenames themselves remain wrong. Renaming would change 96
+variant filenames and every `id` in `gallery.json`. Harmless while the site is
+unpublished, worth doing before it goes live.
