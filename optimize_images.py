@@ -24,7 +24,9 @@ except ImportError:
     exit(1)
 
 # Configuration
-INPUT_DIR = Path("../Portfolio Selections")  # full-resolution masters, not deployed
+INPUT_DIR = Path("../Portfolio Corrected")  # colour-corrected masters; these are what ship
+# ../Portfolio Selections holds the uncorrected originals. With the RAWs gone they are
+# the only masters left, so nothing writes to that directory.
 OUTPUT_DIR = Path("images")  # derived variants, deployed
 SIZES = [400, 800, 1200, 2000]  # Width breakpoints for srcset
 WEBP_QUALITY = 85
