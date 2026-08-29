@@ -1271,12 +1271,19 @@
             lightboxLoading.classList.remove('visible');
         }
 
+        // Resolve the display-sized variant. Never img.src -- that attribute is the
+        // JPEG fallback, and reading it pulled the full-resolution original (F1).
+        function lightboxTarget(img) {
+            return img.dataset.lightboxSrc || img.currentSrc || img.src;
+        }
+
         function openLightbox(index) {
             lastFocusedElement = document.activeElement;
             currentIndex = index;
             const img = visibleItems[index].querySelector('img');
             showLoading();
-            lightboxImg.src = img.src;
+            lightboxImg.dataset.fallback = img.dataset.lightboxFallback || '';
+            lightboxImg.src = lightboxTarget(img);
             lightboxImg.alt = img.alt;
             updateCounter();
             updateCaption(img.alt);
@@ -1286,7 +1293,15 @@
         }
 
         lightboxImg.addEventListener('load', hideLoading);
-        lightboxImg.addEventListener('error', hideLoading);
+        lightboxImg.addEventListener('error', () => {
+            // One-shot fallback for a browser without WebP support.
+            const fb = lightboxImg.dataset.fallback;
+            if (fb && !lightboxImg.getAttribute('src').endsWith(fb)) {
+                lightboxImg.src = fb;
+                return;
+            }
+            hideLoading();
+        });
 
         // Share functionality
         lightboxShare.addEventListener('click', async () => {
@@ -1343,7 +1358,8 @@
             if (currentIndex < 0) currentIndex = visibleItems.length - 1;
             const img = visibleItems[currentIndex].querySelector('img');
             showLoading();
-            lightboxImg.src = img.src;
+            lightboxImg.dataset.fallback = img.dataset.lightboxFallback || '';
+            lightboxImg.src = lightboxTarget(img);
             lightboxImg.alt = img.alt;
             updateCounter();
             updateCaption(img.alt);
