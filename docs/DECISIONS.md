@@ -134,13 +134,12 @@ noisy sky was avoidable in camera.
 
 ## Open / not done
 
-1. **Private admin backend** (requested 2026-08-29, in progress). Architecture
-   decided: the candidate photos live on `M:` and no web CMS can see them, so
-   this splits in two —
-   - a **local picker** for selecting new frames from the library, and
-   - a **web admin** (Decap CMS at `/admin`, git-backed) for editing tags,
-     captions and order of already-published photos.
-   `data/gallery.json` + `build.py` were built as the prerequisite for both.
+1. **Private admin backend** (requested 2026-08-29). Split in two because the
+   candidate photos live on `M:` and no hosted CMS can see them:
+   - **Local picker — BUILT.** `tools/picker/`. Indexes 11,860 real-camera
+     frames across 114 outings, browse/filter/star/publish. See its README.
+   - **Web admin — not started.** Decap CMS at `/admin`, git-backed, for editing
+     tags, captions and order of already-published photos from anywhere.
 2. **Phase 2 — hosting cutover.** Netlify canonical, `netlify.toml`,
    `rel="canonical"`, retire GitHub Pages, clear two `pages-build-deployment`
    runs queued since 2026-02-02. Verify Netlify builds *before* disabling Pages.
@@ -153,3 +152,40 @@ noisy sky was avoidable in camera.
    Recommendation was to remove them site-wide. Undecided.
 6. **Three lightbox images exceed 1MB** (`0026`, `0034`, `0069`). Dropping WebP
    quality to 80 on the 2000w tier would fix it.
+
+
+---
+
+## GitHub Actions `schedule` is not a scheduler
+
+Diagnosed 2026-08-29 while chasing repeated healthchecks.io down/up alerts.
+
+The alerts were **not** about this website. They come from a dead man's switch
+pinged by `publish.yml` in `mayniac24/mayniac-creations` (the Instagram bot).
+healthchecks.io is passive — it never probes anything, it waits for pings — so
+"the site is down for 90 minutes" was never the right reading.
+
+Measured over 2026-08-09..29, against a `7,22,37,52 * * * *` cron requesting 96
+runs/day:
+
+| Period | Runs/day |
+|---|---|
+| Aug 9–14 | ~20 |
+| Aug 15–23 | 36–48 |
+| Aug 24–26 | 33, 34, 21 |
+| Aug 27–29 | **3, 2, 3** |
+
+Every run that fired succeeded (100/100). Runs simply were not being created,
+with dark periods up to 11 hours. **Not a billing problem** — the repo is public,
+so Actions minutes are unlimited; that was my first hypothesis and it was wrong.
+
+**`workflow_dispatch` is not throttled.** A test dispatch started in one second.
+
+Fix in place: scheduled task **"Mayniac publish trigger"** on this machine runs
+`M:\_repos\mayniac-creations\scripts	rigger-publish.ps1` every 15 minutes at
+:03/:18/:33/:48, which dispatches the workflow. The machine is already up 24/7
+for Plex and Syncthing. The workflow's own cron is left as a harmless fallback;
+`concurrency: publish` prevents overlap.
+
+**Generalise:** never put anything time-sensitive on a GitHub `schedule` trigger.
+Drive it externally and dispatch.
