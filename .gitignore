@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+
+# picker local state: machine-specific paths, thumbnail cache, in-progress picks
+tools/picker/picker_index.json
+tools/picker/selections.json
+tools/picker/.thumbs/

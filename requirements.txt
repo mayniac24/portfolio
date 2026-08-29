@@ -1,2 +1,5 @@
 pillow>=11
 pytest>=8
+
+# tools/picker only — not needed to build or deploy the site
+flask>=3

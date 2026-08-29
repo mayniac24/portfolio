@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portfolio Picker</title>
+<style>
+  :root {
+    --bg:#141416; --panel:#1c1c20; --line:#2c2c33;
+    --fg:#e8e8ea; --dim:#8b8b95; --accent:#d9a441; --ok:#4a9d5f;
+  }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif }
+  header { position:sticky; top:0; z-index:10; background:var(--panel);
+           border-bottom:1px solid var(--line); padding:10px 16px;
+           display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+  h1 { font-size:15px; margin:0 8px 0 0; font-weight:600; letter-spacing:.02em }
+  select, button { background:#26262c; color:var(--fg); border:1px solid var(--line);
+                   border-radius:6px; padding:6px 10px; font:inherit }
+  button { cursor:pointer }
+  button:hover { border-color:var(--dim) }
+  button.primary { background:var(--accent); color:#1a1a1a; border-color:var(--accent);
+                   font-weight:600 }
+  button.primary:disabled { opacity:.4; cursor:not-allowed }
+  .count { color:var(--dim); margin-left:auto; font-variant-numeric:tabular-nums }
+  main { padding:14px; display:grid; gap:14px;
+         grid-template-columns:repeat(auto-fill,minmax(260px,1fr)) }
+  figure { margin:0; background:var(--panel); border:1px solid var(--line);
+           border-radius:8px; overflow:hidden; display:flex; flex-direction:column }
+  figure.starred { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) }
+  .imgwrap { position:relative; aspect-ratio:3/2; background:#0d0d0f; cursor:pointer }
+  .imgwrap img { width:100%; height:100%; object-fit:cover; display:block }
+  .star { position:absolute; top:6px; right:6px; width:30px; height:30px;
+          border-radius:50%; border:none; background:rgba(0,0,0,.6);
+          color:#fff; font-size:15px; line-height:1; cursor:pointer }
+  figure.starred .star { background:var(--accent); color:#1a1a1a }
+  figcaption { padding:7px 9px; font-size:11.5px; color:var(--dim);
+               display:flex; justify-content:space-between; gap:6px }
+  .meta { color:var(--dim) }
+  .badge { padding:1px 6px; border-radius:4px; background:#2a2a31; font-size:10.5px }
+  .badge.golden { background:#4a3a18; color:var(--accent) }
+  .fields { display:none; padding:0 9px 9px; gap:6px; flex-direction:column }
+  figure.starred .fields { display:flex }
+  .fields input, .fields select { width:100%; font-size:12px; padding:5px 7px }
+  .fields input.missing { border-color:#8a4040 }
+  #log { position:fixed; right:14px; bottom:14px; max-width:460px; max-height:45vh;
+         overflow:auto; background:var(--panel); border:1px solid var(--line);
+         border-radius:8px; padding:10px 12px; font:12px/1.5 ui-monospace,monospace;
+         white-space:pre-wrap; display:none }
+  #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.92); display:none;
+              align-items:center; justify-content:center; z-index:50; cursor:zoom-out }
+  #lightbox img { max-width:94vw; max-height:94vh; object-fit:contain }
+</style>
+</head>
+<body>
+<header>
+  <h1>Portfolio Picker</h1>
+  <select id="outing"><option value="">All outings</option></select>
+  <select id="light"><option value="">All light</option></select>
+  <select id="camera"><option value="">All cameras</option></select>
+  <label style="color:var(--dim)"><input type="checkbox" id="onlyStarred"> starred only</label>
+  <span class="count" id="count"></span>
+  <button id="publish" class="primary" disabled>Publish</button>
+</header>
+<main id="grid"></main>
+<div id="log"></div>
+<div id="lightbox"><img alt=""></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const grid = $('#grid'), logEl = $('#log');
+let starred = 0;
+
+function log(msg) { logEl.style.display='block'; logEl.textContent = msg; }
+
+async function loadFacets() {
+  const f = await (await fetch('/api/facets')).json();
+  for (const [sel, items] of [['#outing', f.outings], ['#light', f.lights],
+                              ['#camera', f.cameras]]) {
+    for (const it of items) {
+      const o = document.createElement('option');
+      o.value = it.name; o.textContent = `${it.name} (${it.n})`;
+      $(sel).append(o);
+    }
+  }
+  starred = f.starred;
+  $('#publish').disabled = starred === 0;
+  $('#publish').textContent = `Publish ${starred || ''}`.trim();
+  $('#count').textContent = `${f.published} published · ${starred} starred`;
+}
+
+function card(p) {
+  const fig = document.createElement('figure');
+  fig.className = p.starred ? 'starred' : '';
+  fig.innerHTML = `
+    <div class="imgwrap">
+      <img loading="lazy" src="/thumb/${encodeURI(p.id)}?s=320" alt="">
+      <button class="star" title="star">${p.starred ? '★' : '☆'}</button>
+    </div>
+    <figcaption>
+      <span class="meta">${p.date} ${p.time} · ${p.camera}</span>
+      <span class="badge ${p.light === 'golden' ? 'golden' : ''}">${p.light}</span>
+    </figcaption>
+    <div class="fields">
+      <select class="cat">
+        <option value="landscape">landscape</option>
+        <option value="wedding">wedding</option>
+        <option value="maternity">maternity</option>
+      </select>
+      <input class="alt" placeholder="Alt text (required to publish)"
+             value="${(p.alt || '').replace(/"/g, '&quot;')}">
+    </div>`;
+  if (p.category) fig.querySelector('.cat').value = p.category;
+  if (p.starred && !p.alt) fig.querySelector('.alt').classList.add('missing');
+
+  const send = body => fetch('/api/star/' + encodeURI(p.id), {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  }).then(r => r.json()).then(r => {
+    starred = r.starred;
+    $('#publish').disabled = starred === 0;
+    $('#publish').textContent = `Publish ${starred || ''}`.trim();
+  });
+
+  fig.querySelector('.star').onclick = e => {
+    e.stopPropagation();
+    const on = !fig.classList.contains('starred');
+    fig.classList.toggle('starred', on);
+    fig.querySelector('.star').textContent = on ? '★' : '☆';
+    send(on ? {category: fig.querySelector('.cat').value,
+               alt: fig.querySelector('.alt').value} : {starred:false});
+  };
+  fig.querySelector('.imgwrap').onclick = () => {
+    $('#lightbox img').src = '/thumb/' + encodeURI(p.id) + '?s=1600';
+    $('#lightbox').style.display = 'flex';
+  };
+  for (const f of ['.cat', '.alt']) {
+    fig.querySelector(f).onchange = () => {
+      fig.querySelector('.alt').classList.toggle(
+        'missing', !fig.querySelector('.alt').value.trim());
+      send({category: fig.querySelector('.cat').value,
+            alt: fig.querySelector('.alt').value});
+    };
+  }
+  return fig;
+}
+
+async function load() {
+  const q = new URLSearchParams();
+  for (const [k, sel] of [['outing','#outing'],['light','#light'],['camera','#camera']])
+    if ($(sel).value) q.set(k, $(sel).value);
+  if ($('#onlyStarred').checked) q.set('starred','1');
+  grid.innerHTML = '<p style="color:var(--dim)">loading…</p>';
+  const d = await (await fetch('/api/photos?' + q)).json();
+  grid.innerHTML = '';
+  // The library is large; render a slice rather than 20k nodes.
+  for (const p of d.photos.slice(0, 400)) grid.append(card(p));
+  if (d.total > 400) {
+    const n = document.createElement('p');
+    n.style.color = 'var(--dim)';
+    n.textContent = `showing 400 of ${d.total} — narrow the filters to see the rest`;
+    grid.append(n);
+  }
+}
+
+$('#lightbox').onclick = () => $('#lightbox').style.display = 'none';
+for (const s of ['#outing','#light','#camera','#onlyStarred'])
+  $(s).onchange = load;
+
+$('#publish').onclick = async () => {
+  if (!confirm(`Publish ${starred} photo(s)? This corrects them, generates ` +
+               `variants, updates gallery.json and rebuilds index.html. ` +
+               `Nothing is committed.`)) return;
+  $('#publish').disabled = true;
+  log('publishing…');
+  const r = await (await fetch('/api/publish', {method:'POST'})).json();
+  log((r.ok ? `✓ added ${r.added}\n\n` : `✗ ${r.error}\n\n`) +
+      (r.log || []).join('\n'));
+  if (r.ok) { await loadFacets(); await load(); }
+  else $('#publish').disabled = false;
+};
+
+loadFacets().then(load);
+</script>
+</body>
+</html>
