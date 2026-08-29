@@ -26,7 +26,7 @@ except ImportError:
 # Configuration
 INPUT_DIR = Path("images")
 OUTPUT_DIR = Path("images")  # Output to same directory
-SIZES = [400, 800, 1200]  # Width breakpoints for srcset
+SIZES = [400, 800, 1200, 2000]  # Width breakpoints for srcset
 WEBP_QUALITY = 85
 JPEG_QUALITY = 85
 
@@ -34,7 +34,8 @@ def get_image_files():
     """Get all JPEG images in the input directory."""
     extensions = {'.jpg', '.jpeg', '.png'}
     return [f for f in INPUT_DIR.iterdir()
-            if f.suffix.lower() in extensions and not f.stem.endswith(('-400', '-800', '-1200'))]
+            if f.suffix.lower() in extensions
+            and not any(f.stem.endswith(f"-{s}") for s in SIZES)]
 
 def optimize_image(input_path: Path):
     """Generate responsive sizes and WebP version of an image."""
