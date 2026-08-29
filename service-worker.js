@@ -1,4 +1,4 @@
-const CACHE_NAME = 'portfolio-v1';
+const CACHE_NAME = 'portfolio-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -30,40 +30,46 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Only ever cache derived variants. Originals are no longer deployed, but this
+// keeps a stray full-resolution request from being written to a visitor device.
+const CACHEABLE_IMAGE = /-(?:400|800|1200|2000)\.(?:jpg|webp)$/i;
+
+function isHTML(request) {
+  return request.mode === 'navigate' ||
+    (request.headers.get('accept') || '').includes('text/html');
+}
+
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
   if (event.request.method !== 'GET') return;
+
+  // HTML is network-first: a deploy must never be masked by a stale cache.
+  if (isHTML(event.request)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((c) => c || caches.match('/')))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cached version and update cache in background
-        event.waitUntil(
-          fetch(event.request).then((response) => {
-            if (response.ok) {
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(event.request, response);
-              });
-            }
-          }).catch(() => {})
-        );
-        return cachedResponse;
-      }
+      if (cachedResponse) return cachedResponse;
 
-      // Not in cache - fetch from network
       return fetch(event.request).then((response) => {
-        // Cache images and successful responses
-        if (response.ok && (event.request.url.match(/\.(jpg|jpeg|png|webp|svg)$/i) || event.request.url.includes('index.html'))) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+        if (response.ok && CACHEABLE_IMAGE.test(new URL(event.request.url).pathname)) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return response;
       }).catch(() => {
-        // Offline fallback for images
-        if (event.request.url.match(/\.(jpg|jpeg|png|webp)$/i)) {
+        if (/\.(jpg|jpeg|png|webp)$/i.test(event.request.url)) {
           return new Response(
             '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect fill="#1a1a1a" width="400" height="300"/><text fill="#555" x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="system-ui">Offline</text></svg>',
             { headers: { 'Content-Type': 'image/svg+xml' } }
