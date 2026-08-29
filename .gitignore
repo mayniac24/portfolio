@@ -1,14 +1,2 @@
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Editor files
-*.swp
-*.swo
-*~
-.vscode/
-.idea/
-
-# Logs
-*.log
+__pycache__/
+*.pyc

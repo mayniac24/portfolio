@@ -88,9 +88,15 @@
     </script>
 
     <!-- Preload critical images (first 3 visible on load) -->
-    <link rel="preload" as="image" href="images/20250927-DSC_0562-2000.jpg">
-    <link rel="preload" as="image" href="images/20250927-DSC_0668-2000.jpg">
-    <link rel="preload" as="image" href="images/20260202-DSC_0341-1-2000.jpg">
+    <link rel="preload" as="image" type="image/webp"
+          imagesrcset="images/20250927-DSC_0562-400.webp 400w, images/20250927-DSC_0562-800.webp 800w, images/20250927-DSC_0562-1200.webp 1200w, images/20250927-DSC_0562-2000.webp 2000w"
+          imagesizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+    <link rel="preload" as="image" type="image/webp"
+          imagesrcset="images/20250927-DSC_0668-400.webp 400w, images/20250927-DSC_0668-800.webp 800w, images/20250927-DSC_0668-1200.webp 1200w, images/20250927-DSC_0668-2000.webp 2000w"
+          imagesizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
+    <link rel="preload" as="image" type="image/webp"
+          imagesrcset="images/20260202-DSC_0341-1-400.webp 400w, images/20260202-DSC_0341-1-800.webp 800w, images/20260202-DSC_0341-1-1200.webp 1200w, images/20260202-DSC_0341-1-2000.webp 2000w"
+          imagesizes="(max-width: 480px) 100vw, (max-width: 768px) 50vw, 25vw">
 
     <style>
         * {
