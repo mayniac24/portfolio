@@ -24,8 +24,8 @@ except ImportError:
     exit(1)
 
 # Configuration
-INPUT_DIR = Path("images")
-OUTPUT_DIR = Path("images")  # Output to same directory
+INPUT_DIR = Path("../Portfolio Selections")  # full-resolution masters, not deployed
+OUTPUT_DIR = Path("images")  # derived variants, deployed
 SIZES = [400, 800, 1200, 2000]  # Width breakpoints for srcset
 WEBP_QUALITY = 85
 JPEG_QUALITY = 85
@@ -71,48 +71,8 @@ def optimize_image(input_path: Path):
                 resized.save(webp_path, 'WEBP', quality=WEBP_QUALITY)
                 print(f"  Created: {webp_path.name}")
 
-            # Create full-size WebP
-            webp_full = OUTPUT_DIR / f"{stem}.webp"
-            img.save(webp_full, 'WEBP', quality=WEBP_QUALITY)
-            print(f"  Created: {webp_full.name}")
-
     except Exception as e:
         print(f"  Error processing {input_path.name}: {e}")
-
-def generate_html_snippet(image_files):
-    """Generate HTML snippets for picture elements with srcset."""
-    print("\n" + "="*60)
-    print("HTML SNIPPETS FOR RESPONSIVE IMAGES")
-    print("="*60)
-    print("\nReplace your <img> tags with these <picture> elements:\n")
-
-    for img_path in image_files:
-        stem = img_path.stem
-        ext = img_path.suffix
-
-        # Check which sizes were actually created
-        sizes = [s for s in SIZES if (OUTPUT_DIR / f"{stem}-{s}.webp").exists()]
-
-        if not sizes:
-            continue
-
-        webp_srcset = ", ".join([f"images/{stem}-{s}.webp {s}w" for s in sizes])
-        webp_srcset += f", images/{stem}.webp {Image.open(img_path).size[0]}w"
-
-        jpeg_srcset = ", ".join([f"images/{stem}-{s}.jpg {s}w" for s in sizes])
-        jpeg_srcset += f", images/{stem}{ext} {Image.open(img_path).size[0]}w"
-
-        print(f"""<picture>
-  <source type="image/webp"
-          srcset="{webp_srcset}"
-          sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw">
-  <img src="images/{stem}{ext}"
-       srcset="{jpeg_srcset}"
-       sizes="(max-width: 480px) 50vw, (max-width: 768px) 25vw, 12.5vw"
-       alt="[YOUR ALT TEXT]"
-       loading="lazy">
-</picture>
-""")
 
 def main():
     if not INPUT_DIR.exists():
@@ -133,17 +93,11 @@ def main():
     for img_path in image_files:
         optimize_image(img_path)
 
-    generate_html_snippet(image_files)
-
     print("\n" + "="*60)
     print("OPTIMIZATION COMPLETE")
     print("="*60)
     print(f"\nProcessed {len(image_files)} images.")
     print("Generated responsive sizes: " + ", ".join(f"{s}px" for s in SIZES))
-    print("\nNext steps:")
-    print("1. Review the generated HTML snippets above")
-    print("2. Update index.html with <picture> elements")
-    print("3. Test on different screen sizes")
 
 if __name__ == "__main__":
     main()
