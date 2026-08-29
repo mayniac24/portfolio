@@ -1,0 +1,206 @@
+{
+  "categories": [
+    {
+      "id": "landscape",
+      "label": "Landscapes"
+    },
+    {
+      "id": "wedding",
+      "label": "Weddings"
+    },
+    {
+      "id": "maternity",
+      "label": "Maternity"
+    }
+  ],
+  "photos": [
+    {
+      "id": "20220712-DSC_0358",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Chimney Rock sandstone spires lit by low evening sun against a clear sky."
+    },
+    {
+      "id": "20240326-DSC_0482",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Palm trees on a green sea cliff above the surf at Pololu Valley, Hawaii."
+    },
+    {
+      "id": "20241113-DSC_0059",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Longs Peak silhouetted against a burning orange sunset sky."
+    },
+    {
+      "id": "20250818-DSC_0296",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Notchtop Mountain rising behind conifers in golden evening light."
+    },
+    {
+      "id": "20240326-DSC_0473",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Pololu Valley coastline with palms leaning out over the Pacific."
+    },
+    {
+      "id": "20241113-DSC_0084",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Orange and teal sunset banding above a dark Front Range ridgeline."
+    },
+    {
+      "id": "20210718-DSC_5526",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Layered mountain ridgelines fading into dusk from Trail Ridge Road."
+    },
+    {
+      "id": "20250601-DSC_0087",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Snow-covered peak catching warm light through a screen of pines."
+    },
+    {
+      "id": "20250927-DSC_0209",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "Wedding couple poses by a stone chapel with mountains and sky in the background."
+    },
+    {
+      "id": "20250927-DSC_0424",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "Bride and groom pose for a wedding photo against a mountainous landscape."
+    },
+    {
+      "id": "20250927-DSC_0087",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "A bride and groom stand on a rock with mountain scenery in the background."
+    },
+    {
+      "id": "20250927-DSC_0505",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "A couple in wedding attire poses on a wooden bridge with snow-capped mountains and autumn foliage."
+    },
+    {
+      "id": "20250927-DSC_0562",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "Couple in formal attire stands on a dock overlooking a scenic lake with mountains."
+    },
+    {
+      "id": "20250927-DSC_0319",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "A bride and groom pose for their wedding photos in front of a stone church with a cross."
+    },
+    {
+      "id": "20250927-DSC_0590",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "A couple poses for a portrait in front of autumn trees and snow-capped mountains."
+    },
+    {
+      "id": "20250927-DSC_0668",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "A couple poses by a lake with a forested mountain in the background."
+    },
+    {
+      "id": "20250927-DSC_0618_BW",
+      "category": "wedding",
+      "attributes": [
+        "bw"
+      ],
+      "alt": "Black and white portrait of a woman in a wedding dress with mountains and forest behind her."
+    },
+    {
+      "id": "20260202-DSC_0056-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "Pregnant woman posing in a scenic mountain forest during golden hour."
+    },
+    {
+      "id": "20260202-DSC_0139-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "A woman and child stand in a golden field at sunset with mountains in the distance."
+    },
+    {
+      "id": "20250927-DSC_0646",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "A man in a blue suit stands outdoors with autumn trees and snow-capped mountains behind him."
+    },
+    {
+      "id": "20260202-DSC_0197-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "A pregnant woman in a green dress stands in a field with mountains and forest in the background."
+    },
+    {
+      "id": "20260202-DSC_0204-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "A pregnant woman in a green dress poses in a scenic mountain landscape with forests and open fields."
+    },
+    {
+      "id": "20260202-DSC_0026-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "Pregnant woman posing among trees and rock formations in a scenic outdoor setting."
+    },
+    {
+      "id": "20260202-DSC_0231-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "Pregnant woman and young child stand in a sunlit meadow with mountains in the distance."
+    },
+    {
+      "id": "20260202-DSC_0292-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "Pregnant woman in a green dress stands in an open field at sunset with mountains and dramatic sky behind her."
+    },
+    {
+      "id": "20260202-DSC_0034-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "A pregnant woman poses outdoors near rocks and trees with mountains in the background."
+    },
+    {
+      "id": "20260202-DSC_0341-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "Pregnant woman in a green dress poses outdoors during sunset with mountainous scenery."
+    },
+    {
+      "id": "20260202-DSC_0385-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "Pregnant woman and child holding hands in a field during sunset with mountain range."
+    },
+    {
+      "id": "20260202-DSC_0069-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "Pregnant woman in a floral dress poses against rocky mountains and trees."
+    },
+    {
+      "id": "20260202-DSC_0413-1",
+      "category": "maternity",
+      "attributes": [],
+      "alt": "Pregnant woman in a green dress stands in a field with mountains and a colorful sunset sky."
+    },
+    {
+      "id": "20260202-DSC_0574",
+      "category": "wedding",
+      "attributes": [],
+      "alt": "Couple walks hand-in-hand along a path through autumn foliage toward mountainous scenery."
+    }
+  ]
+}

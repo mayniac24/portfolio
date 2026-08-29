@@ -15,7 +15,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 INDEX = REPO / "index.html"
 
-SESSIONS = {"wedding", "engagement", "maternity", "family", "portrait", "event"}
+# Subject categories. "landscape" is legitimate here now: orientation moved to
+# is-wide/is-tall, so the word no longer names two different things. That
+# collision -- not the word itself -- was finding F3.
+CATEGORIES = {"landscape", "wedding", "engagement", "maternity",
+              "family", "portrait", "event"}
 ORIENTATIONS = {"is-wide", "is-tall"}
 
 ITEM_RE = re.compile(r'<div class="gallery-item([^"]*)" data-category="([^"]*)"')
@@ -30,21 +34,21 @@ def _items():
     return [(cls.split(), cat.split()) for cls, cat in ITEM_RE.findall(_html())]
 
 
-def test_every_item_has_exactly_one_session():
+def test_every_item_has_exactly_one_category():
     bad = [c for _, c in _items() if len(c) != 1]
-    assert bad == [], f"items with zero or multiple session values: {bad}"
+    assert bad == [], f"items with zero or multiple category values: {bad}"
 
 
-def test_sessions_come_from_the_agreed_vocabulary():
+def test_categories_come_from_the_agreed_vocabulary():
     used = {c[0] for _, c in _items() if c}
-    assert used <= SESSIONS, f"unknown session values: {used - SESSIONS}"
+    assert used <= CATEGORIES, f"unknown category values: {used - CATEGORIES}"
 
 
-def test_no_orientation_word_is_used_as_a_session():
-    # The exact collision that produced F3. "landscape" and "portrait" are the
-    # dangerous pair: both are orientation words AND plausible session names.
-    leaked = [c for _, c in _items() if {"landscape", "is-wide", "is-tall"} & set(c)]
-    assert leaked == [], f"orientation words leaking into data-category: {leaked}"
+def test_no_orientation_class_is_used_as_a_category():
+    # F3 was one word naming both axes. The axes are now disjoint by
+    # construction, and this keeps them that way.
+    leaked = [c for _, c in _items() if ORIENTATIONS & set(c)]
+    assert leaked == [], f"orientation classes leaking into data-category: {leaked}"
 
 
 def test_every_item_has_exactly_one_orientation_class():

@@ -2,7 +2,9 @@
 
 **Date:** 2026-08-28
 **Repo:** `M:\Photos & Videos\Portfolio Website` → `github.com/mayniac24/portfolio`
-**Status:** Approved, pending implementation plan
+**Status:** Phases 1 and 3 implemented. Superseded in part -- see
+`docs/DECISIONS.md` for the 2026-08-29 identity change and for two
+photo-selection approaches that were tried and failed.
 
 ## Context
 
@@ -11,6 +13,10 @@ The site is a static photography portfolio. Two decisions frame this work:
 - **Purpose:** showcase now, client-facing later. Fix the foundation and get identity
   right so it can become a business site without a rewrite. Do not build lead-gen
   machinery yet.
+- **REVISED 2026-08-29:** the site shows landscapes AND client work, **landscapes
+  leading**. The taxonomy below predates this and section 5 is superseded:
+  `landscape` is now a first-class category, which is safe because orientation
+  moved to `is-wide`/`is-tall`. See `docs/DECISIONS.md`.
 - **Canonical host:** Netlify (`https://mayniac-portfolio.netlify.app/`). GitHub Pages
   is retired.
 
@@ -163,7 +169,7 @@ Two orthogonal axes, no shared vocabulary:
 | Axis | Values | Purpose |
 |---|---|---|
 | Orientation | `is-wide`, `is-tall` | CSS grid spanning only. Renamed to end the collision. |
-| Session | wedding, engagement, maternity, family, portrait, event | The filter bar. Exactly one per image. |
+| Category | landscape, wedding, engagement, maternity, family, portrait, event | The filter bar. Exactly one per image. Renamed from "Session" 2026-08-29 when landscape became first-class. |
 | Attributes | `bw` | Metadata only. No filter button until the count justifies one. |
 
 All 23 images are re-tagged. The vision prompt in `auto_categorize.py` is rewritten to
@@ -237,6 +243,12 @@ Add a `requirements.txt` (`pillow`, `requests`, `jinja2`); the repo currently ha
 2. **Hosting cutover (F6 canonical)** — retire Pages, add `netlify.toml`.
 3. **Data model, build pipeline, taxonomy re-tag (F3, F5).**
 4. **Structure split, metadata, CLAUDE.md (F6).**
+
+**Status 2026-08-29:** phase 1 complete (tagged `phase1-image-delivery`). Phase 3
+complete: `data/gallery.json` + `build.py` + marker-based injection, F3 filters
+fixed, metadata updated for the landscape-first identity. Phase 2 (hosting
+cutover) not started. A private admin backend was requested on 2026-08-29 and is
+the current work; `gallery.json` was built as its prerequisite.
 
 ## Risks
 
