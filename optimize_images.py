@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageOps
 except ImportError:
     print("Error: Pillow is required. Install with: pip install pillow")
     exit(1)
@@ -110,6 +110,12 @@ def optimize_image(input_path: Path):
 
     try:
         with Image.open(input_path) as img:
+            # Bake in the EXIF Orientation before any resize. Variants ship
+            # with no Orientation tag (see rights_metadata), so a source shot
+            # in portrait but stored wide-with-rotate-tag would otherwise
+            # ship wide and untagged -- sideways with nothing to correct it.
+            img = ImageOps.exif_transpose(img)
+
             # Convert to RGB if necessary (for PNG with transparency)
             if img.mode in ('RGBA', 'P'):
                 img = img.convert('RGB')
