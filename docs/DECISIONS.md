@@ -214,6 +214,18 @@ portfolio. What actually protects the work, in order:
 copying source EXIF, so GPS never reaches the web. `tests/test_rights.py`
 guards all of this, including that no GPS is published.
 
+**Allowlist (2026-10-17, his word).** Published copies (`images/`) carry only what
+`share_metadata` in `_studio_settings.json` lists: any of `copyright`, `artist`, `camera`
+(Make, Model), `lens` (LensMake, LensModel), `exposure` (ExposureTime, FNumber, ISO,
+FocalLength), `icc_profile`. Absent setting or file means the ICC profile only; an empty
+list means nothing. Everything else is stripped from jpg and webp alike: GPS, dates and
+times, serials, software and editing history, XMP, IPTC, MakerNotes, thumbnails, comments
+(this also retires the WebP XMP packet and the `ImageDescription` above). The kept tags are
+written fresh; the source EXIF is only read. Masters, originals and finish folders are never
+modified. Guard: `tests/test_share_metadata.py`. Note `tests/test_rights.py` still expects
+Copyright and Artist on every deployed file, so the list must include `copyright` and
+`artist` for a regenerated `images/` to pass it.
+
 ### How the watermarks came off
 
 Not by inpainting. Unwatermarked originals existed in the library

@@ -32,7 +32,6 @@ SIZES = [400, 800, 1200, 2000]  # Width breakpoints for srcset
 WEBP_QUALITY = 85
 
 CREATOR = "Mayniac Creations"
-SITE = "https://mayniac-portfolio.netlify.app/"
 
 
 def _known_year(stem: str) -> str | None:
@@ -54,47 +53,87 @@ def _known_year(stem: str) -> str | None:
     return None
 
 
-def rights_metadata(stem: str, source: Path):
-    """Build a MINIMAL copyright block for the deployed variants.
+#: What `share_metadata` may name (settings key in _studio_settings.json). The published
+#: copies (images/) carry exactly these and nothing else; the masters are never touched.
+SHARE_CHOICES = ("copyright", "artist", "camera", "lens", "exposure", "icc_profile")
+EXIF_IFD, IFD_BASE = 0x8769, 0
+_TAGS = {                       # choice -> [(ifd, tag)] copied FRESH from the source
+    "camera": [(IFD_BASE, 0x010F), (IFD_BASE, 0x0110)],                 # Make, Model
+    "lens": [(EXIF_IFD, 0xA433), (EXIF_IFD, 0xA434)],                   # LensMake, LensModel
+    "exposure": [(EXIF_IFD, 0x829A), (EXIF_IFD, 0x829D),                # ExposureTime, FNumber
+                 (EXIF_IFD, 0x8827), (EXIF_IFD, 0x920A)],               # ISO, FocalLength
+}
 
-    Deliberately not a copy of the source EXIF: the originals carry GPS, and
-    publishing the coordinates of client shoots is a privacy problem. Only
-    authorship and rights go out.
+
+def share_allowlist(settings=None):
+    """The set of metadata kinds that may be published.
+
+    `share_metadata` in _studio_settings.json (same loader as the picker). Absent file or
+    absent key: only the ICC profile (colour must survive; nothing identifying does).
+    A present list is taken exactly, an empty list meaning nothing at all. Unknown names are
+    ignored with a warning.
+    """
+    if settings is None:
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).resolve().parent / "tools" / "picker"))
+            import studio_link
+            settings = studio_link.load_settings()
+        except Exception as exc:  # unreadable settings fail closed: strip everything
+            print(f"  settings unreadable ({exc}); publishing ICC profile only")
+            settings = {}
+    listed = settings.get("share_metadata")
+    if listed is None:
+        return {"icc_profile"}
+    unknown = [x for x in listed if x not in SHARE_CHOICES]
+    if unknown:
+        print(f"  share_metadata: ignoring unknown {unknown}")
+    return {x for x in listed if x in SHARE_CHOICES}
+
+
+def published_metadata(stem: str, source_exif, source_icc, allowed):
+    """-> (exif bytes or None, icc bytes or None) for a published variant.
+
+    Every tag is written FRESH into an empty Exif block; the source EXIF is only read.
+    So GPS, dates and times, serial numbers, software and editing history, XMP, IPTC,
+    MakerNotes, thumbnails and comments cannot come through: nothing copies them. What
+    goes out is exactly the kinds in `allowed` (see SHARE_CHOICES).
 
     Visible watermarks stop casual reposting and nothing else -- generative fill
     removes one in seconds. Embedded rights survive reposting, cost nothing
     visually, and give provenance if a claim is ever needed.
     """
-    year = _known_year(stem) or (stem[:4] if stem[:4].isdigit() else "")
-    try:
-        ex = Image.open(source).getexif()
-        raw = str(ex.get_ifd(0x8769).get(36867, ""))     # DateTimeOriginal
-        if raw[:4].isdigit() and not _known_year(stem):
-            year = raw[:4]
-    except Exception:
-        pass
-    notice = f"(c) {year} {CREATOR}. All rights reserved." if year else              f"(c) {CREATOR}. All rights reserved."
+    out = Image.Exif()
+    wrote = False
+    if "artist" in allowed:
+        out[0x013B] = CREATOR                    # Artist
+        wrote = True
+    if "copyright" in allowed:
+        year = _known_year(stem) or (stem[:4] if stem[:4].isdigit() else "")
+        try:
+            raw = str(source_exif.get_ifd(EXIF_IFD).get(36867, ""))   # DateTimeOriginal: year only
+            if raw[:4].isdigit() and not _known_year(stem):
+                year = raw[:4]
+        except Exception:
+            pass
+        out[0x8298] = (f"(c) {year} {CREATOR}. All rights reserved." if year
+                       else f"(c) {CREATOR}. All rights reserved.")
+        wrote = True
+    for choice in ("camera", "lens", "exposure"):
+        if choice not in allowed:
+            continue
+        for ifd, tag in _TAGS[choice]:
+            try:
+                value = (source_exif if ifd == IFD_BASE else source_exif.get_ifd(ifd)).get(tag)
+            except Exception:
+                value = None
+            if value in (None, "", b""):
+                continue
+            (out if ifd == IFD_BASE else out.get_ifd(ifd))[tag] = value
+            wrote = True
+    return (out.tobytes() if wrote else None), (source_icc if "icc_profile" in allowed else None)
 
-    exif = Image.Exif()
-    exif[0x013B] = CREATOR      # Artist
-    exif[0x8298] = notice       # Copyright
-    exif[0x010E] = f"{notice} {SITE}"   # ImageDescription
 
-    xmp = (
-        '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>'
-        '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
-        '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
-        '<rdf:Description rdf:about="" '
-        'xmlns:dc="http://purl.org/dc/elements/1.1/" '
-        'xmlns:xmpRights="http://ns.adobe.com/xap/1.0/rights/">'
-        f'<dc:creator><rdf:Seq><rdf:li>{CREATOR}</rdf:li></rdf:Seq></dc:creator>'
-        f'<dc:rights><rdf:Alt><rdf:li xml:lang="x-default">{notice}</rdf:li>'
-        '</rdf:Alt></dc:rights>'
-        '<xmpRights:Marked>True</xmpRights:Marked>'
-        f'<xmpRights:WebStatement>{SITE}</xmpRights:WebStatement>'
-        '</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>'
-    )
-    return exif.tobytes(), xmp
 JPEG_QUALITY = 85
 
 def get_image_files():
@@ -104,14 +143,20 @@ def get_image_files():
             if f.suffix.lower() in extensions
             and not any(f.stem.endswith(f"-{s}") for s in SIZES)]
 
-def optimize_image(input_path: Path):
-    """Generate responsive sizes and WebP version of an image."""
+def optimize_image(input_path: Path, allowed=None):
+    """Generate responsive sizes and WebP version of an image.
+
+    `allowed` is the set of metadata kinds to publish (default: share_allowlist())."""
+    if allowed is None:
+        allowed = share_allowlist()
     print(f"Processing: {input_path.name}")
 
     try:
         with Image.open(input_path) as img:
+            source_exif = img.getexif()
+            source_icc = img.info.get("icc_profile")
             # Bake in the EXIF Orientation before any resize. Variants ship
-            # with no Orientation tag (see rights_metadata), so a source shot
+            # with no Orientation tag (see published_metadata), so a source shot
             # in portrait but stored wide-with-rotate-tag would otherwise
             # ship wide and untagged -- sideways with nothing to correct it.
             img = ImageOps.exif_transpose(img)
@@ -123,7 +168,12 @@ def optimize_image(input_path: Path):
             original_width, original_height = img.size
             stem = input_path.stem
 
-            exif_bytes, xmp_str = rights_metadata(stem, input_path)
+            exif_bytes, icc = published_metadata(stem, source_exif, source_icc, allowed)
+            meta = {}
+            if exif_bytes:
+                meta["exif"] = exif_bytes
+            if icc:
+                meta["icc_profile"] = icc
 
             # Generate sized versions
             for width in SIZES:
@@ -135,17 +185,19 @@ def optimize_image(input_path: Path):
                 height = int(original_height * ratio)
 
                 resized = img.resize((width, height), Image.Resampling.LANCZOS)
+                # resize() carries img.info over (comment, xmp, jfif...) and Pillow writes
+                # some of it on save. Only `meta` below may reach the file.
+                resized.info = {}
 
                 # Save JPEG version
                 jpeg_path = OUTPUT_DIR / f"{stem}-{width}.jpg"
                 resized.save(jpeg_path, 'JPEG', quality=JPEG_QUALITY,
-                             optimize=True, exif=exif_bytes)
+                             optimize=True, **meta)
                 print(f"  Created: {jpeg_path.name}")
 
                 # Save WebP version
                 webp_path = OUTPUT_DIR / f"{stem}-{width}.webp"
-                resized.save(webp_path, 'WEBP', quality=WEBP_QUALITY,
-                             exif=exif_bytes, xmp=xmp_str)
+                resized.save(webp_path, 'WEBP', quality=WEBP_QUALITY, **meta)
                 print(f"  Created: {webp_path.name}")
 
     except Exception as e:

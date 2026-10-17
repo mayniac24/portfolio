@@ -23,20 +23,26 @@ import io
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_file
 from PIL import Image, ImageOps
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import correct_colour  # noqa: E402
+import studio_link  # noqa: E402
 
 Image.MAX_IMAGE_PIXELS = None
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-INDEX = HERE / "picker_index.json"
-SELECTIONS = HERE / "selections.json"
+# Where the index and selections live, and everything else about the studio, is read
+# from _studio_settings.json (studio_link.py); absent file = the defaults beside this file.
+SETTINGS = studio_link.load_settings()
+INDEX = studio_link.index_path(SETTINGS)
+SELECTIONS = studio_link.selections_path(SETTINGS)
 SHORTLIST = HERE / "shortlist.json"
 CACHE = HERE / ".thumbs"
 CORRECTED = REPO.parent / "Portfolio Corrected"
@@ -50,6 +56,7 @@ if _index is None:
     sys.exit("no picker_index.json — run tools/picker/index_library.py first")
 ROOT = Path(_index["root"])
 PHOTOS = {p["id"]: p for p in _index["photos"]}
+PHOTOS_ROOT = Path(SETTINGS.get("photos_root") or ROOT)
 
 # An externally-produced shortlist narrows what you browse. It is deliberately a
 # FILTER, not an ordering - see README on why ranking was abandoned twice. Held in
@@ -69,6 +76,35 @@ def load_selections() -> dict:
 
 def save_selections(sel: dict) -> None:
     SELECTIONS.write_text(json.dumps(sel, indent=1), encoding="utf-8", newline="\n")
+
+
+# Pick events go out on one worker thread, in order, so the star never waits on the bus or on
+# resolving the outing id. Python joins the worker at exit, so a queued event still lands.
+_PICKS = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pick-events")
+
+
+def record_pick(photo_id: str, state: str, meta: dict | None = None) -> None:
+    """Queue a `pick` event (starred / unstarred) for studio-picker.jsonl. Never raises."""
+    meta = dict(meta or {})
+    _PICKS.submit(_write_pick, photo_id, state, meta)
+
+
+def flush_picks() -> None:
+    """Block until every queued pick event has been written (tests, shutdown)."""
+    _PICKS.submit(lambda: None).result()
+
+
+def _write_pick(photo_id: str, state: str, meta: dict) -> None:
+    try:
+        src = ROOT / photo_id
+        outing_dir = studio_link.outing_dir_of_frame(src, PHOTOS[photo_id].get("outing", ""))
+        outing = (studio_link.outing_id_for(SETTINGS, PHOTOS_ROOT, outing_dir)
+                  if outing_dir else None)
+        studio_link.append_event(SETTINGS, "pick", outing=outing,
+                                 frame=studio_link.frame_id(src, PHOTOS_ROOT), state=state,
+                                 category=meta.get("category", ""), alt=meta.get("alt", ""))
+    except Exception as exc:  # noqa: BLE001
+        print(f"pick event not written: {exc}", file=sys.stderr)
 
 
 def thumb(photo_id: str, size: int) -> Path:
@@ -139,6 +175,7 @@ def api_star(photo_id: str):
         abort(404)
     sel = load_selections()
     body = request.get_json(silent=True) or {}
+    was_starred = photo_id in sel
     if body.get("starred") is False:
         sel.pop(photo_id, None)
     else:
@@ -147,6 +184,11 @@ def api_star(photo_id: str):
                       if k in ("category", "alt")})
         sel[photo_id] = entry
     save_selections(sel)
+    # An event only on a change of state: category/alt edits on a starred frame are not picks.
+    if body.get("starred") is False and was_starred:
+        record_pick(photo_id, "unstarred")
+    elif body.get("starred") is not False and not was_starred:
+        record_pick(photo_id, "starred", sel.get(photo_id))
     return jsonify({"ok": True, "starred": len(sel)})
 
 
