@@ -37,6 +37,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 INDEX = HERE / "picker_index.json"
 SELECTIONS = HERE / "selections.json"
+SHORTLIST = HERE / "shortlist.json"
 CACHE = HERE / ".thumbs"
 CORRECTED = REPO.parent / "Portfolio Corrected"
 GALLERY = REPO / "data" / "gallery.json"
@@ -49,6 +50,15 @@ if _index is None:
     sys.exit("no picker_index.json — run tools/picker/index_library.py first")
 ROOT = Path(_index["root"])
 PHOTOS = {p["id"]: p for p in _index["photos"]}
+
+# An externally-produced shortlist narrows what you browse. It is deliberately a
+# FILTER, not an ordering - see README on why ranking was abandoned twice. Held in
+# its own file so re-running index_library.py cannot discard it.
+def load_shortlist() -> tuple[set, str]:
+    if not SHORTLIST.exists():
+        return set(), "shortlist"
+    d = json.loads(SHORTLIST.read_text(encoding="utf-8"))
+    return set(d.get("ids", [])), d.get("label", "shortlist")
 
 
 def load_selections() -> dict:
@@ -93,6 +103,9 @@ def api_photos():
         out = [p for p in out if p["light"] == q]
     if (q := request.args.get("camera")):
         out = [p for p in out if p["camera"] == q]
+    if request.args.get("short") == "1":
+        short, _ = load_shortlist()
+        out = [p for p in out if p["id"] in short]
     if request.args.get("starred") == "1":
         out = [p for p in out if p["id"] in sel]
     return jsonify({
@@ -114,6 +127,8 @@ def api_facets():
         "cameras": [{"name": k, "n": v} for k, v in
                     Counter(p["camera"] for p in ps).most_common()],
         "starred": len(load_selections()),
+        "shortlist": len(load_shortlist()[0]),
+        "shortlist_label": load_shortlist()[1],
         "published": len(json.loads(GALLERY.read_text(encoding="utf-8"))["photos"]),
     })
 
