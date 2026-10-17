@@ -171,6 +171,40 @@ python tools/picker/tweak.py recipe list [--json]
 - Exit codes: 0 ok, 2 usage or environment, 3 refused.
 - Tests: `python -m pytest tests/test_tweak.py -q -p no:cacheprovider --basetemp .pt`.
 
+## Face guard: kids' faces are never published
+
+Evan's rule: our kids' faces are never posted, anywhere. If a frame with them is shared, the
+faces are covered by a hard emoji (never blur or pixelation). `faces.py` is the one tool every
+publisher calls (`publish_external.py`, the picker's `/api/publish`, `optimize_images.py`, and
+other repos through the `face_tool` setting). Unknown means refuse.
+
+```
+python tools/picker/faces.py check  <image> [--json]
+python tools/picker/faces.py mask   <image> --auto [--box x,y,w,h]... --frame ID --outing OID [--checked-all-faces] --apply
+python tools/picker/faces.py clear  <frame id> --outing OID --by NAME [--i-am-at-the-desk] --apply
+python tools/picker/faces.py status <frame id> --outing OID
+python tools/picker/faces.py gate   <image> --frame ID --outing OID | --no-frame [--key SLUG]
+```
+
+- **Workflow.** Export from Lightroom, run `mask --auto --frame ... --outing ... --apply` on the
+  export, look at `<stem>_masked.jpg`, then run `publish_external.py` (it publishes the masked
+  sibling, not the plain export). After writing, the detector runs on the masked output and
+  nothing is kept or recorded if a face is still found. With children aboard or companions unknown (no hike log), add
+  `--checked-all-faces` once you have looked at every face in the masked file.
+- **The gate refuses** a frame with a detected face, with children among the companions, with
+  a companion who is not in the People notes, with no hike log (companions unknown), or when
+  `child_relationships` is not configured. Client sessions and other non-hike outings have no
+  hike log, so each frame needs an owner `clear` (or a verified mask).
+- **`clear`** works only for a name in `face_clearers`, from an interactive terminal or the
+  Horizons desktop door (`--i-am-at-the-desk`). A `cleared` row is honoured only while its
+  author is still a clearer.
+- **Limits, measured** (Windows FaceDetector, the only detector on this PC; OpenCV 5 has no Haar
+  cascades): faces about 70 px wide and up at the scan scale (~1600 px, plus 1600 px tiles with
+  25% overlap on larger images); frontal-oriented, tilts up to ~35 degrees off an axis found,
+  about 40-55 degrees missed; profiles, turned heads and occlusion unreliable. This is not a
+  guarantee: the companion rule and your own look at every masked frame are the backstops.
+- Tests: `python -m pytest tests/test_faces.py -q -p no:cacheprovider --basetemp <abs dir>`.
+
 ## Notes
 
 - Binds to `127.0.0.1` only. There is no auth and it should not be exposed.

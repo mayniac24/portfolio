@@ -399,6 +399,9 @@ def _publish_fixture(lib):
                "camera": "D3200", "iso": 100, "elev": 10.0, "light": "golden"} for i in lib["ids"]]
     (lib["tmp"] / "idx.json").write_text(json.dumps({"root": str(lib["root"]), "photos": photos}),
                                          encoding="utf-8")
+    # the face guard needs to know who was along: a hike log that says "solo"
+    (lib["tmp"] / "_studio_outings.json").write_text(json.dumps({"outings": [
+        {"id": "out-fixture", "folder": OUTING, "hike_logs": [{"companions": ["solo"]}]}]}), encoding="utf-8")
     exp = lib["tmp"] / "exports"
     exp.mkdir()
     for stem in ("DSC_0001", "DSC_0003"):
@@ -666,3 +669,72 @@ def test_publish_external_decides_new_by_post_event_not_by_gallery(lib, monkeypa
     gallery.write_text(json.dumps({"photos": []}), encoding="utf-8")
     assert m.main(base) == 0
     assert len([r for r in _rows(lib) if r["kind"] == "post"]) == 2
+
+
+# ---------------------------------------------------------------- the picker's own publish is gated
+
+def _picker_publish_setup(lib, monkeypatch, clearers=()):
+    """The picker app with a real source image, a starred frame, and stubs for the colour
+    correction and the subprocesses. -> (app module, calls, corrected dir, gallery file)."""
+    cfg = json.loads(lib["settings"].read_text(encoding="utf-8"))
+    cfg["face_clearers"] = list(clearers)
+    lib["settings"].write_text(json.dumps(cfg), encoding="utf-8")
+    app = _app(lib, monkeypatch)
+    pid = lib["ids"][0]
+    Image.new("RGB", (80, 60), (120, 90, 60)).save(lib["root"] / pid, "JPEG")
+    c = app.app.test_client()
+    assert c.post("/api/star/" + pid, json={"alt": "a ridge", "category": "landscape"}).status_code == 200
+    app.flush_picks()
+    gallery = lib["tmp"] / "gallery.json"
+    gallery.write_text(json.dumps({"photos": []}), encoding="utf-8")
+    corrected = lib["tmp"] / "corrected"
+    monkeypatch.setattr(app, "GALLERY", gallery)
+    monkeypatch.setattr(app, "CORRECTED", corrected)
+    calls = []
+
+    class Done:
+        returncode, stdout, stderr = 0, "", ""
+    monkeypatch.setattr(app.subprocess, "run", lambda cmd, **k: calls.append(cmd) or Done())
+    monkeypatch.setattr(app.correct_colour, "process",
+                        lambda src, dst, *a, **k: Path(dst).write_bytes(Path(src).read_bytes()))
+    return app, calls, corrected, gallery
+
+
+def test_picker_publish_is_refused_before_anything_is_written(lib, monkeypatch):
+    import faces
+
+    class Everywhere:
+        name = "everywhere"
+
+        def detect(self, image):
+            return [[1, 1, 20, 20, 1.0]]
+    app, calls, corrected, gallery = _picker_publish_setup(lib, monkeypatch)
+    monkeypatch.setattr(faces, "default_detectors", lambda s=None: [Everywhere()])
+    r = app.app.test_client().post("/api/publish", json={})
+    assert r.status_code == 409
+    body = r.get_json()
+    assert body["ok"] is False and body["refused"][0]["id"] == lib["ids"][0] and "face" in body["refused"][0]["reason"]
+    assert not corrected.exists() and calls == []                       # no master, no optimize, no build
+    assert json.loads(gallery.read_text(encoding="utf-8")) == {"photos": []}
+    assert lib["ids"][0] in json.loads(lib["sel_file"].read_text(encoding="utf-8"))     # still starred
+
+
+def test_picker_publish_refuses_when_the_companions_are_unknown_even_with_no_face(lib, monkeypatch):
+    app, calls, corrected, gallery = _picker_publish_setup(lib, monkeypatch)      # conftest: a detector that finds nothing
+    r = app.app.test_client().post("/api/publish", json={})
+    assert r.status_code == 409 and "companions unknown" in r.get_json()["refused"][0]["reason"]
+    assert not corrected.exists() and calls == []
+
+
+def test_picker_publish_goes_ahead_for_a_cleared_frame_and_limits_optimize_to_its_stems(lib, monkeypatch):
+    import faces
+    app, calls, corrected, gallery = _picker_publish_setup(lib, monkeypatch, clearers=["evan"])
+    pid = lib["ids"][0]
+    oid = app.studio_link.outing_id_for(app.SETTINGS, app.PHOTOS_ROOT, lib["outing"])
+    faces.record(app.SETTINGS, "frame", pid, "cleared", outing=oid, by="evan", events_dir=lib["events"])
+    r = app.app.test_client().post("/api/publish", json={})
+    assert r.status_code == 200 and r.get_json()["added"] == 1
+    assert (corrected / "20261013-DSC_0001.jpg").is_file()
+    assert calls[0][-2:] == ["--only", "20261013-DSC_0001"] and calls[0][-3].endswith("optimize_images.py")
+    key = [x for x in _rows(lib) if x["kind"] == "faces" and x.get("key") == "20261013-DSC_0001"]
+    assert key and key[0]["state"] == "cleared" and key[0]["cleared_by"] == "evan"

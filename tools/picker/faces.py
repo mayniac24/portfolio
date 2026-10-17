@@ -3,12 +3,16 @@
 
 Evan's rule (2026-10-17, binding): our kids' faces do not get posted anywhere, ever. If a
 photo with them is shared, the faces are hidden behind a hard emoji or something equally
-unrecoverable and still tasteful. This one tool is what every publisher calls.
+unrecoverable and still tasteful. This one tool is what every publisher calls. Unknown means
+refuse: a detector that cannot run, a companion nobody can identify, an outing with no hike
+log, an unreadable file.
 
     python tools/picker/faces.py check <image> [--json]
     python tools/picker/faces.py mask  <image> [--auto] [--box x,y,w,h]... [--out PATH]
-                                       [--frame ID --outing OID | --key SLUG] [--by M] [--via V] [--apply]
-    python tools/picker/faces.py clear <frame id | --key SLUG> --outing OID --by NAME [--apply]
+                                       [--frame ID --outing OID | --key SLUG] [--by M] [--via V]
+                                       [--checked-all-faces] [--apply]
+    python tools/picker/faces.py clear <frame id | --key SLUG> --outing OID --by NAME
+                                       [--i-am-at-the-desk] [--apply]
     python tools/picker/faces.py status <frame id | --key SLUG> --outing OID [--json]
     python tools/picker/faces.py gate  <image> (--frame ID --outing OID [--companions-file NOTE]
                                                | --no-frame [--key SLUG]) [--json]
@@ -16,20 +20,44 @@ unrecoverable and still tasteful. This one tool is what every publisher calls.
 Exit codes: 0 fine; 3 refused or failed (a detector error is a refusal: the guard fails
 CLOSED, so a caller that only checks the exit code is safe); 2 bad usage.
 
-Detection is LOCAL ONLY: no network, no model download. Detectors, all unioned:
-  * the Windows Runtime FaceDetector (a component of Windows; no model file to fetch),
-    run on four rotations and two scales;
-  * OpenCV Haar cascades (frontal default, alt2, profile and mirrored profile), when this
-    OpenCV build ships a CascadeClassifier and the XML files (OpenCV 5 does not);
-  * OpenCV YuNet, only when a face_detection_yunet*.onnx already sits in cv2's data dir or
+DETECTION is LOCAL ONLY: no network, no model download. The detectors that are available on
+the machine all run and their boxes are unioned:
+  * the Windows Runtime FaceDetector (a component of Windows; no model file to fetch), on four
+    rotations (0/90/180/270). This is the only one on Evan's PC today;
+  * OpenCV Haar cascades (frontal default, alt2, profile and mirrored profile), only if this
+    OpenCV build has a CascadeClassifier AND the XML files are present (OpenCV 5 has neither);
+  * OpenCV YuNet, only if a face_detection_yunet*.onnx already sits in cv2's data dir or
     `face_models_dir`.
-With none available the guard refuses everything that is not already masked or cleared.
+With none available the guard refuses everything that is not already cleared.
 
-Boxes are in the coordinates of the image as DISPLAYED (EXIF orientation applied), because
-the masked output carries no orientation tag. Masking draws an opaque ellipse in the
-region's mean colour over each face (padded 35%) and an emoji on top: no blur or pixelation,
-no layers, and nothing of the face survives in the file. Frame state lives on the studio bus
-as `faces` events (`studio-picker.jsonl`); the last event for a frame wins.
+Scan: the whole image downscaled to ~1600 px; for an image over 1600 px also full-resolution
+~1600 px tiles with 25% overlap (so a face under ~400 px lands whole in some tile); for an
+image under 1200 px also an upscaled copy. Boxes are mapped back and merged.
+
+MEASURED LIMITS (Windows FaceDetector, two adult faces from the live site pasted on a grey
+canvas at the scan scale): it finds faces about 70 px wide and up; below ~56-64 px it misses.
+It is frontal-oriented: in-plane tilts up to ~35 degrees off any of the four axes were found,
+tilts of about 40-55 degrees (45 above all) were missed on both faces. Profiles, heads
+turned away, faces behind sunglasses or hands, and heavy shadow are not reliably found. This is
+NOT a guarantee. The backstops are the companion rule (a frame from an outing with children,
+or with companions nobody can identify, is refused even when no face is found), the
+masked-file re-check, and Evan's own review of every masked frame. Non-hike outings (client
+sessions) have no hike log, so every frame needs an owner `clear` or a mask.
+
+MASKING: boxes are in the coordinates of the image as DISPLAYED (EXIF orientation applied),
+because the masked output carries no orientation tag. Each box is padded 35% per side, an
+opaque ellipse in the region's mean colour is drawn over it and an emoji on top: no blur or
+pixelation, no layers, nothing of the face survives. After writing, the detector runs on the
+OUTPUT; if any face is still found nothing is kept or recorded. `mask` also refuses when
+fewer boxes were given than faces were detected on the source.
+
+STATE lives on the studio bus as `faces` events (`studio-picker.jsonl`); the last honoured
+event for a frame or key wins. A `masked` row allows publishing only the file whose sha1 it
+holds, and only if the detector finds no face in it; with children (or unidentifiable
+companions) aboard it must also have been made with `--auto --checked-all-faces`. A `cleared`
+row counts only if the person who made it (`member`, or `cleared_by` on a key row copied by
+publish_external) is in `face_clearers` now. `clear` needs an interactive terminal, or
+`--i-am-at-the-desk` for the Horizons desktop door; a script or worker cannot clear.
 Settings (studio_link.py): face_clearers, child_relationships, face_emoji, face_models_dir.
 """
 from __future__ import annotations
@@ -60,7 +88,8 @@ except ImportError:  # the guard cannot work without Pillow: every entry point t
 VERSION = 1
 EXIT_REFUSED = 3
 PAD = 0.35                       # each side, as a fraction of the box
-LONG_EDGE = 1600                 # detection copy
+LONG_EDGE = 1600                 # detection copy and tile size
+TILE_OVERLAP = 0.25
 JPEG_QUALITY = 92
 EMOJI_FONT = "seguiemj.ttf"
 MINOR_YEARS = 18
@@ -232,7 +261,7 @@ class WinRTDetector:
                 r = subprocess.run(
                     [_powershell(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                      "-File", str(tmp / "winface.ps1"), str(tmp / "list.txt")],
-                    capture_output=True, timeout=600, creationflags=flags)
+                    capture_output=True, timeout=300, creationflags=flags)
             except (OSError, subprocess.SubprocessError) as exc:
                 raise FaceError("Windows FaceDetector failed to run: %s" % exc)
             text = r.stdout.decode("utf-8", errors="replace").strip()
@@ -361,22 +390,48 @@ def _detect_many(det, images):
     return [fn(im) for im in images]
 
 
-def detect_faces(img, detectors):
-    """Faces in an RGB image: the union over detectors of a ~1600 px copy, plus (small
-    images) an upscaled copy. Returns (boxes in the image's own coordinates, names)."""
+def tile_origins(length, tile=LONG_EDGE, overlap=TILE_OVERLAP):
+    """Start offsets of tiles along one axis: `tile` long, evenly spread so neighbours overlap by
+    at least `overlap` and the last ends exactly at `length`. One tile when it already fits."""
+    if length <= tile:
+        return [0]
+    step = max(1, int(tile * (1 - overlap)))
+    n = -(-(length - tile) // step) + 1             # tiles needed at <= step spacing
+    return [round(i * (length - tile) / (n - 1)) for i in range(n)]
+
+
+def scan_passes(img):
+    """[(copy, scale, ox, oy)]: every copy the detectors see. A copy's box maps back to the
+    original as (x/scale + ox, y/scale + oy). The downscaled whole always runs; an image over
+    LONG_EDGE also runs full-resolution ~1600 px tiles with 25% overlap (a face is a small
+    part of a big frame), and a small one (under 1200 px) also runs an upscaled copy."""
     W, H = img.size
     long_edge = max(W, H)
-    scales = [min(1.0, LONG_EDGE / long_edge)]
+    s = min(1.0, LONG_EDGE / long_edge)
+    passes = [(img if s == 1.0 else img.resize((max(1, round(W * s)), max(1, round(H * s))), Image.LANCZOS),
+               s, 0, 0)]
     if long_edge < 1200:
-        scales.append(LONG_EDGE / long_edge)         # a 400 px variant: faces are tiny
-    copies = [img if s == 1.0 else img.resize((max(1, round(W * s)), max(1, round(H * s))), Image.LANCZOS)
-              for s in scales]
+        up = LONG_EDGE / long_edge                   # a 400 px variant: faces are tiny
+        passes.append((img.resize((max(1, round(W * up)), max(1, round(H * up))), Image.LANCZOS), up, 0, 0))
+    elif long_edge > LONG_EDGE:
+        for oy in tile_origins(H):
+            for ox in tile_origins(W):
+                passes.append((img.crop((ox, oy, min(W, ox + LONG_EDGE), min(H, oy + LONG_EDGE))), 1.0, ox, oy))
+    return passes
+
+
+def detect_faces(img, detectors):
+    """Faces in an RGB image: the union over detectors of every scan pass (see scan_passes),
+    boxes mapped back and merged. Returns (boxes in the image's own coordinates, names)."""
+    W, H = img.size
+    passes = scan_passes(img)
+    copies = [p[0] for p in passes]
     found, names = [], []
     for det in detectors:
         names.append(getattr(det, "name", det.__class__.__name__))
-        for s, boxes in zip(scales, _detect_many(det, copies)):
+        for (_, s, ox, oy), boxes in zip(passes, _detect_many(det, copies)):
             for b in boxes:
-                found.append(_clamp_box([b[0] / s, b[1] / s, b[2] / s, b[3] / s,
+                found.append(_clamp_box([b[0] / s + ox, b[1] / s + oy, b[2] / s, b[3] / s,
                                          b[4] if len(b) > 4 else 1.0], W, H))
     found = [b for b in found if b[2] > 0 and b[3] > 0]
     return merge_boxes(found), names
@@ -469,7 +524,8 @@ def share_metadata_for(stem, exif, icc, settings):
         return None, None
 
 
-def write_masked(img, out_path, exif_bytes, icc):
+def write_masked(img, out_path, exif_bytes, icc, verify=None):
+    """Encode to `<out>.part`, let `verify(part)` veto it (it raises), then rename into place."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_name(out_path.name + ".part")
@@ -480,6 +536,12 @@ def write_masked(img, out_path, exif_bytes, icc):
         meta["icc_profile"] = icc
     img.info = {}
     img.convert("RGB").save(tmp, "JPEG", quality=JPEG_QUALITY, optimize=True, **meta)
+    if verify is not None:
+        try:
+            verify(tmp)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
     os.replace(tmp, out_path)
     return out_path
 
@@ -497,21 +559,49 @@ def _ident_matches(row, ident, outing):
     return not (outing and row.get("outing") and row.get("outing") != outing)
 
 
+def clearers(settings):
+    allowed = (settings or {}).get("face_clearers")
+    return {str(x).casefold() for x in allowed} if isinstance(allowed, list) else set()
+
+
+def may_clear(settings, who):
+    return bool(who) and str(who).casefold() in clearers(settings)
+
+
+def _honoured(row, settings):
+    """A masked row always counts (its sha is checked where it is used). A cleared row counts
+    only when the person who cleared it is in face_clearers NOW: `cleared_by` on a key row
+    copied by publish_external, else the row's `member`."""
+    if row.get("state") == "masked":
+        return True
+    return row.get("state") == "cleared" and may_clear(settings, row.get("cleared_by") or row.get("member"))
+
+
 def status_of(settings, ident, outing=None, events_dir=None):
-    """Last `faces` event for the frame or key: {"state": masked|cleared|none, image, sha1}."""
+    """Last honoured `faces` event for the frame or key: {"state": masked|cleared|none,
+    image, sha1, by, auto, checked, detected, boxes}. A `cleared` row by anyone not in
+    face_clearers is ignored, as if it were not there."""
     last = None
     for row in link.read_own_events(settings, events_dir):
-        if _ident_matches(row, ident, outing) and row.get("state") in ("masked", "cleared"):
+        if _ident_matches(row, ident, outing) and _honoured(row, settings):
             last = row
     if last is None:
-        return {"state": "none", "image": None, "sha1": None}
-    return {"state": last["state"], "image": last.get("image"), "sha1": last.get("sha1")}
+        return {"state": "none", "image": None, "sha1": None, "by": None}
+    return {"state": last["state"], "image": last.get("image"), "sha1": last.get("sha1"),
+            "by": last.get("cleared_by") or last.get("member"), "auto": bool(last.get("auto")),
+            "checked": bool(last.get("checked")), "detected": last.get("detected"),
+            "boxes": last.get("boxes")}
 
 
-def has_clearance(ident, settings=None, events_dir=None):
-    """True when a masked or cleared `faces` event exists for the frame/key. Any error is False."""
+def has_clearance(ident, settings=None, events_dir=None, image=None):
+    """True when the frame/key is cleared by a clearer, or masked AND `image` is the very file
+    that was recorded (its sha1 matches). Any error is False."""
     try:
-        return status_of(settings or link.load_settings(), ident, None, events_dir)["state"] != "none"
+        st = status_of(settings or link.load_settings(), ident, None, events_dir)
+        if st["state"] == "cleared":
+            return True
+        return bool(st["state"] == "masked" and st["sha1"] and image
+                    and link.sha1_file(image) == st["sha1"])
     except Exception:  # noqa: BLE001
         return False
 
@@ -521,13 +611,6 @@ def record(settings, ident_kind, ident, state, *, outing=None, by="", via="cli",
     payload.update({k: v for k, v in extra.items() if v is not None})
     return link.append_event(settings, "faces", outing=outing or None, via=via, member=by or None,
                              events_dir=events_dir, **payload)
-
-
-def may_clear(settings, who):
-    allowed = settings.get("face_clearers")
-    if not isinstance(allowed, list) or not who:
-        return False
-    return str(who).casefold() in {str(a).casefold() for a in allowed}
 
 
 # ------------------------------------------------------------------ companions
@@ -560,29 +643,52 @@ def split_names(raw):
     return out
 
 
+def _raw_tags(block):
+    """Tags read straight from the frontmatter text, so `- #child` (which YAML takes as a
+    comment and drops) and `'#child'` survive. Leading `#` is stripped."""
+    out, inside = [], False
+    for ln in block.splitlines():
+        m = re.match(r"tags\s*:(.*)$", ln)
+        if m:
+            inside, rest = True, m.group(1)
+        elif inside and re.match(r"[A-Za-z0-9_-]+\s*:", ln):
+            inside, rest = False, ""
+        elif inside:
+            rest = re.sub(r"^\s*-\s*", " ", ln)
+        else:
+            continue
+        out += [x.lstrip("#") for x in re.findall(r"#?[\w/-]+", rest)]
+    return [x for x in out if x]
+
+
 def read_frontmatter(path):
+    """The note's frontmatter as a dict. `tags` is the union of what YAML parsed and what the
+    raw text holds (see _raw_tags). Works without PyYAML (a minimal reader)."""
     text = Path(path).read_text(encoding="utf-8")
-    m = re.match(r"\ufeff?---\r?\n(.*?)\r?\n---", text, re.S)
+    m = re.match("﻿?---\r?\n(.*?)\r?\n---", text, re.S)
     if not m:
         return {}
+    block = m.group(1)
     try:
         import yaml
-        data = yaml.safe_load(m.group(1)) or {}
-        return data if isinstance(data, dict) else {}
+        data = yaml.safe_load(block) or {}
+        data = data if isinstance(data, dict) else {}
     except ImportError:
-        pass
-    data, key = {}, None                           # a minimal reader: scalars, [a, b], and - lists
-    for ln in m.group(1).splitlines():
-        item = re.match(r"\s+-\s+(.*)", ln)
-        kv = re.match(r"([A-Za-z0-9_-]+):\s*(.*)", ln)
-        if kv:
-            key, val = kv.group(1), kv.group(2).strip()
-            if val.startswith("[") and val.endswith("]"):
-                data[key] = [v.strip().strip("'\"") for v in val[1:-1].split(",") if v.strip()]
-            else:
-                data[key] = val.strip("'\"") if val else []
-        elif item and key and isinstance(data.get(key), list):
-            data[key].append(item.group(1).strip().strip("'\""))
+        data, key = {}, None                       # scalars, [a, b], and - lists (indented or not)
+        for ln in block.splitlines():
+            item = re.match(r"\s*-\s+(.*)", ln)
+            kv = re.match(r"([A-Za-z0-9_-]+):\s*(.*)", ln)
+            if kv:
+                key, val = kv.group(1), kv.group(2).strip()
+                if val.startswith("[") and val.endswith("]"):
+                    data[key] = [v.strip().strip("'\"") for v in val[1:-1].split(",") if v.strip()]
+                else:
+                    data[key] = val.strip("'\"") if val else []
+            elif item and key and isinstance(data.get(key), list):
+                data[key].append(item.group(1).strip().strip("'\""))
+    tags = [str(x).lstrip("#") for x in _flatten(data.get("tags"))] + _raw_tags(block)
+    if tags or "tags" in data:
+        data["tags"] = sorted(set(t for t in tags if t))
     return data
 
 
@@ -638,52 +744,81 @@ class People:
         return self.by_name.get(name.casefold())
 
 
+def _word(w):
+    return str(w).strip().lstrip("#").casefold()
+
+
 def is_child(rec, child_words):
-    words = {w.casefold() for w in child_words}
-    tokens = {t for r in rec["relationship"] for t in re.split(r"[/,;|\s]+", r.casefold()) if t}
-    tokens |= {t.casefold() for t in rec["tags"]}
+    """A child by `relationship` token or tag matching child_relationships (a leading # is
+    ignored on both sides), or by a date_of_birth / birthday under 18."""
+    words = {_word(w) for w in child_words} - {""}
+    tokens = {_word(t) for r in rec["relationship"] for t in re.split(r"[/,;|\s]+", r) if t}
+    tokens |= {_word(t) for t in rec["tags"]}
     return bool(tokens & words) or any(a < MINOR_YEARS for a in rec["ages"])
 
 
+SOLO_WORDS = {"solo", "alone", "myself", "by myself", "just me", "none"}
+
+
 def companion_names(settings, outing, companions_file):
-    """-> (names, source) from a hike-log note, else the outing projection. (None, None) when
-    nothing says who was along (no note given, no projection, no such outing)."""
+    """-> (names, why). `names` is None when nothing says who was along; `why` then says why
+    (never a name). An empty list means a hike log with blank companions: unknown, not solo.
+    A note that cannot be read raises."""
     if companions_file:
-        fm = read_frontmatter(companions_file)            # an unreadable note raises: closed
-        return split_names(fm.get("companions")), "note"
-    vault = link.vault_root_of(settings)
-    if not outing or vault is None:
-        return None, None
-    try:
-        data = json.loads((vault / "_studio_outings.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None, None
-    for rec in (data.get("outings") or []) if isinstance(data, dict) else []:
-        if isinstance(rec, dict) and rec.get("id") == outing:
-            logs = rec.get("hike_logs") or ([rec["hike_log"]] if rec.get("hike_log") else [])
-            names = []
-            for lg in logs:
-                names += split_names((lg or {}).get("companions"))
-            return names, "projection"
-    return None, None
+        fm = read_frontmatter(companions_file)
+        names, source = split_names(fm.get("companions")), "the companions note"
+    else:
+        vault = link.vault_root_of(settings)
+        if not outing:
+            return None, "no outing id"
+        if vault is None:
+            return None, "no vault root"
+        try:
+            data = json.loads((vault / "_studio_outings.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None, "no outing projection"
+        rec = next((r for r in (data.get("outings") or []) if isinstance(r, dict) and r.get("id") == outing), None)             if isinstance(data, dict) else None
+        if rec is None:
+            return None, "the outing is not in the projection"
+        logs = rec.get("hike_logs") or ([rec["hike_log"]] if rec.get("hike_log") else [])
+        if not logs:
+            return None, "the outing has no hike log"
+        names, source = [], "the hike log"
+        for lg in logs:
+            names += split_names((lg or {}).get("companions"))
+    if not names:
+        return None, "%s lists no companions (blank is unknown, not solo)" % source
+    return names, source
 
 
 def companion_check(settings, outing, companions_file):
-    """{"checked", "companions", "children", "unresolved"}; never names. Raises FaceError when
-    there are companions and the People notes cannot be consulted."""
-    names, source = companion_names(settings, outing, companions_file)
+    """{"known", "why", "companions", "children", "unresolved", "unset"}; never names.
+    known=False: nobody can say who was along. unresolved: names with no People note.
+    unset: there are companions but child_relationships is empty, so nobody can be ruled out.
+    Raises FaceError when the People notes cannot be consulted."""
+    names, why = companion_names(settings, outing, companions_file)
+    out = {"known": names is not None, "why": why if names is None else None,
+           "companions": 0, "children": 0, "unresolved": 0, "unset": False}
     if not names:
-        return {"checked": names is not None, "companions": 0, "children": 0, "unresolved": 0}
+        return out
+    named = [n for n in names if _word(n) not in SOLO_WORDS]
+    if not named:
+        return out                                    # every entry says "solo": nobody to look up
     people = People(_vault_folder(settings, "people"))
     words = settings.get("child_relationships") or []
-    kids = unresolved = 0
-    for n in names:
+    for n in named:
         rec = people.find(n)
         if rec is None:
-            unresolved += 1
-        elif is_child(rec, words):
-            kids += 1
-    return {"checked": True, "companions": len(names), "children": kids, "unresolved": unresolved}
+            out["unresolved"] += 1
+            out["companions"] += 1
+        elif {_word(t) for r in rec["relationship"] for t in re.split(r"[/,;|\s]+", r) if t} == {"self"}:
+            continue                                  # the owner
+        else:
+            out["companions"] += 1
+            if is_child(rec, words):
+                out["children"] += 1
+    out["unset"] = bool(out["companions"] and not [w for w in words if _word(w)])
+    return out
 
 
 # ------------------------------------------------------------------ the gate
@@ -699,11 +834,28 @@ def _allow(reason, **more):
 def gate(image, *, frame=None, key=None, outing=None, settings=None, events_dir=None,
          companions_file=None, detectors=None):
     """May this image be published? -> {"allowed", "reason", ...}. Never raises: any error
-    is a refusal. `frame` selects the frame rules, otherwise the no-frame rules (use `key`)."""
+    is a refusal, and so is anything unknown. `frame` selects the frame rules (a frame
+    needs an outing, so the companions can be read), otherwise the no-frame rules (`key`)."""
     try:
         return _gate(image, frame, key, outing, settings, events_dir, companions_file, detectors)
     except Exception as exc:  # noqa: BLE001 - fail CLOSED
         return _refuse("error, so refused: %s" % exc)
+
+
+def _masked_file_check(image, st, settings, detectors):
+    """None when `image` is the recorded masked file AND the detector finds no face left in it,
+    else the refusal."""
+    if not (st["sha1"] and link.sha1_file(image) == st["sha1"]):
+        return _refuse("this frame is masked: publish the masked file (%s), not this one"
+                       % (st["image"] or "<stem>_masked.jpg"), state="masked")
+    left = check_image(image, settings, detectors)
+    if left["faces"]:
+        return _refuse("%d face(s) are still detectable in the masked file (%s): mask the misses"
+                       % (len(left["faces"]), left["detector"]), faces=len(left["faces"]), state="masked")
+    if st.get("detected") is not None and st.get("boxes") is not None and st["boxes"] < st["detected"]:
+        return _refuse("the mask was recorded with fewer boxes (%s) than faces detected (%s)"
+                       % (st["boxes"], st["detected"]), state="masked")
+    return None
 
 
 def _gate(image, frame, key, outing, settings, events_dir, companions_file, detectors):
@@ -711,34 +863,47 @@ def _gate(image, frame, key, outing, settings, events_dir, companions_file, dete
         return _refuse("the studio settings file is missing, so the guard cannot know the rules")
     if not Path(image).is_file():
         return _refuse("image not found: %s" % image)
-    ident_kind, ident = ("frame", frame) if frame else ("key", key)
-    st = {"state": "none"}
-    if ident:
-        st = status_of(settings, ident, outing, events_dir)
-    if frame:
-        if st["state"] == "masked":
-            if st["sha1"] and link.sha1_file(image) == st["sha1"]:
-                return _allow("the masked file", state="masked")
-            return _refuse("this frame is masked: publish the masked file (%s), not this one"
-                           % (st["image"] or "<stem>_masked.jpg"), state="masked")
-        if st["state"] == "cleared":
-            return _allow("cleared by Evan", state="cleared")
-    elif st["state"] in ("masked", "cleared"):
-        return _allow("a faces event exists for %s" % key, state=st["state"])
+    ident = frame or key
+    st = status_of(settings, ident, outing, events_dir) if ident else {"state": "none"}
+    if st["state"] == "cleared":
+        return _allow("cleared by %s" % st.get("by"), state="cleared", by=st.get("by"))
+    if st["state"] == "masked":
+        bad = _masked_file_check(image, st, settings, detectors)
+        if bad:
+            return bad
+        if not frame:
+            return _allow("the masked file, no face left in it", state="masked")
+        try:
+            comp = companion_check(settings, outing, companions_file)
+        except Exception:  # noqa: BLE001 - cannot read the People notes: assume the worst
+            comp = {"known": True, "children": 0, "unresolved": 1, "unset": False, "error": True}
+        if (comp["children"] or comp["unresolved"] or comp["unset"]) and not (st["auto"] and st["checked"]):
+            return _refuse("children (or companions that cannot be ruled out) are on this outing: the "
+                           "mask must come from `faces.py mask --auto --checked-all-faces`",
+                           state="masked", companions=comp)
+        return _allow("the masked file, no face left in it", state="masked", companions=comp)
     result = check_image(image, settings, detectors)
     n = len(result["faces"])
     if n:
-        return _refuse("%d face(s) detected (%s): mask them with faces.py mask --auto, or clear the "
-                       "frame" % (n, result["detector"]), faces=n, detector=result["detector"], state="none")
-    if frame:
-        comp = companion_check(settings, outing, companions_file)
-        if comp["children"]:
-            return _refuse("%d child(ren) on this outing's companion list and no face was found: "
-                           "detectors miss profiles and small faces, so mask or clear it" % comp["children"],
-                           faces=0, detector=result["detector"], companions=comp, state="none")
-        return _allow("no face detected, no child among the companions", faces=0,
-                      detector=result["detector"], companions=comp, state="none")
-    return _allow("no face detected", faces=0, detector=result["detector"], state="none")
+        return _refuse("%d face(s) detected (%s): mask them with faces.py mask --auto, or have a "
+                       "clearer clear the frame" % (n, result["detector"]),
+                       faces=n, detector=result["detector"], state="none")
+    if not frame:
+        return _allow("no face detected", faces=0, detector=result["detector"], state="none")
+    comp = companion_check(settings, outing, companions_file)
+    more = dict(faces=0, detector=result["detector"], companions=comp, state="none")
+    if not comp["known"]:
+        return _refuse("companions unknown (%s), and detectors miss profiles and small faces: mask or "
+                       "clear the frame (an outing without a hike log needs a clear per frame)" % comp["why"], **more)
+    if comp["unresolved"]:
+        return _refuse("%d companion(s) are not in the People notes, so nobody can be ruled out a child"
+                       % comp["unresolved"], **more)
+    if comp["unset"]:
+        return _refuse("child_relationships is not configured, so nobody can be ruled out a child", **more)
+    if comp["children"]:
+        return _refuse("%d child(ren) on this outing's companion list and no face was found: detectors "
+                       "miss profiles and small faces, so mask or clear it" % comp["children"], **more)
+    return _allow("no face detected, and every companion is known and not a child", **more)
 
 
 # ------------------------------------------------------------------ CLI
@@ -759,6 +924,13 @@ def _emit(a, obj, text=None):
         print(text)
 
 
+def _interactive():
+    try:
+        return bool(sys.stdin and sys.stdin.isatty())
+    except (AttributeError, ValueError, OSError):
+        return False
+
+
 def cmd_check(a):
     result = check_image(a.image, _settings(a, False))
     if a.json:
@@ -774,19 +946,21 @@ def cmd_mask(a):
     settings = _settings(a, False)
     image = Path(a.image)
     img, exif, icc = load_pixels(image)
-    boxes = []
-    if a.auto:
-        found, names = detect_faces(img, default_detectors(settings))
-        boxes += found
-        print("auto boxes (%s): %d" % ("+".join(names), len(found)))
+    dets = default_detectors(settings)            # no detector: cannot verify, so cannot mask
+    found, names = detect_faces(img, dets)
+    print("detected on the source (%s): %d" % ("+".join(names), len(found)))
     manual = [parse_box(b) for b in a.box or []]
-    boxes += manual
-    print("manual boxes: %d" % len(manual))
+    boxes = (list(found) if a.auto else []) + manual
+    print("boxes: %d auto + %d manual" % (len(found) if a.auto else 0, len(manual)))
     if not boxes:
         print("nothing to mask: pass --auto or --box x,y,w,h")
         return 2
     for b in boxes:
         print("  x=%d y=%d w=%d h=%d" % tuple(round(v) for v in b[:4]))
+    if len(boxes) < len(found):
+        print("REFUSED: %d face(s) detected but only %d box(es): use --auto, or add a --box for each"
+              % (len(found), len(boxes)))
+        return EXIT_REFUSED
     out = Path(a.out) if a.out else default_out(image)
     if out.resolve() == image.resolve():
         print("refusing: the output would overwrite the source")
@@ -797,9 +971,15 @@ def cmd_mask(a):
         return 0
     masked = mask_pixels(img, boxes, settings.get("face_emoji") or "")
     ex, ic = share_metadata_for(image.stem, exif, icc, settings)
-    write_masked(masked, out, ex, ic)
+
+    def verify(part):
+        left, _ = detect_faces(load_pixels(part)[0], dets)
+        if left:
+            raise FaceError("%d face(s) are still detectable in the masked output, so nothing was "
+                            "written or recorded: add a --box for each miss" % len(left))
+    write_masked(masked, out, ex, ic, verify=verify)
     sha = link.sha1_file(out)
-    print("wrote %s  sha1 %s" % (out, sha))
+    print("wrote %s  sha1 %s  (re-checked: no face detectable)" % (out, sha))
     ident = a.frame or a.key
     if ident:
         try:
@@ -808,7 +988,8 @@ def cmd_mask(a):
             root = None
         rec = link.rel_or_abs(out, root) if root else Path(os.path.abspath(out)).as_posix()
         record(settings, "frame" if a.frame else "key", ident, "masked", outing=a.outing, by=a.by,
-               via=a.via, events_dir=a.events_dir, image=rec, sha1=sha, boxes=len(boxes))
+               via=a.via, events_dir=a.events_dir, image=rec, sha1=sha, boxes=len(boxes),
+               detected=len(found), auto=bool(a.auto), checked=bool(a.checked_all_faces))
         print("recorded: faces/masked for %s" % ident)
     return 0
 
@@ -821,6 +1002,10 @@ def cmd_clear(a):
         return 2
     if not may_clear(settings, a.by):
         print("refused: %r is not in face_clearers; only a listed person can clear a frame" % a.by)
+        return EXIT_REFUSED
+    if not (a.i_am_at_the_desk or _interactive()):
+        print("refused: clearing a frame needs Evan at an interactive terminal (or the desktop door's "
+              "--i-am-at-the-desk); a script or worker cannot clear")
         return EXIT_REFUSED
     if not a.apply:
         print("DRY RUN - would record faces/cleared for %s by %s" % (ident, a.by))
@@ -871,9 +1056,14 @@ def build_parser():
     p.add_argument("--auto", action="store_true"); p.add_argument("--box", action="append")
     p.add_argument("--out"); p.add_argument("--frame"); p.add_argument("--key")
     p.add_argument("--by", default=""); p.add_argument("--via", default="cli"); p.add_argument("--apply", action="store_true")
+    p.add_argument("--checked-all-faces", action="store_true",
+                   help="a person looked at the masked file and every face is covered; needed to "
+                        "publish a masked frame from an outing with children")
     p.set_defaults(fn=cmd_mask)
     p = sub.add_parser("clear"); p.add_argument("ident", nargs="?"); common(p)
     p.add_argument("--key"); p.add_argument("--by", default=""); p.add_argument("--via", default="cli")
+    p.add_argument("--i-am-at-the-desk", action="store_true",
+                   help="for the Horizons desktop door only: a human pressed the button")
     p.add_argument("--apply", action="store_true"); p.set_defaults(fn=cmd_clear)
     p = sub.add_parser("status"); p.add_argument("ident", nargs="?"); common(p); p.add_argument("--key")
     p.set_defaults(fn=cmd_status)
@@ -889,7 +1079,7 @@ def main(argv=None) -> int:
     if a.cmd in ("clear", "status") and a.ident and not a.outing:
         print("%s of a frame wants --outing <id>" % a.cmd)
         return 2
-    if a.cmd == "mask" and a.frame and not a.outing:
+    if a.cmd in ("mask", "gate") and a.frame and not a.outing:
         print("--frame wants --outing <id>")
         return 2
     try:

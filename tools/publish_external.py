@@ -93,7 +93,7 @@ def gate_plan(settings, a, root, outing_dir, photos, plan):
             res = faces.gate(it[0], frame=pid, outing=oid, settings=settings, events_dir=a.events_dir)
             if res["allowed"]:
                 chosen[pid] = it
-                cleared[pid] = (oid, res.get("state"))
+                cleared[pid] = (oid, res.get("state"), res.get("by"))
                 break
         else:
             refused.append((items[0][0], pid, res["reason"]))
@@ -104,10 +104,13 @@ def record_clearances(settings, a, kept, cleared) -> None:
     """A published master is looked up by its id (optimize_images' guard): leave a `faces`
     event for the id when the frame is masked or cleared."""
     for f, pid, gid, date in kept:
-        oid, state = cleared[pid]
+        oid, state, by = cleared[pid]
         if state not in ("masked", "cleared"):
             continue
-        extra = {"sha1": link.sha1_file(f), "image": link.rel_or_abs(f, CORRECTED)} if state == "masked" else {}
+        # a copied `cleared` row keeps who cleared it (`cleared_by`): it is honoured only while
+        # that person is in face_clearers; a masked one holds the sha1 of the file published
+        extra = ({"sha1": link.sha1_file(f), "image": link.rel_or_abs(f, CORRECTED)} if state == "masked"
+                 else {"cleared_by": by})
         faces.record(settings, "key", gid, state, outing=oid, by=a.by, via=a.via, events_dir=a.events_dir,
                      of=pid, **extra)
 
@@ -180,8 +183,6 @@ def main(argv=None) -> int:
     plan, refused, cleared = gate_plan(settings, a, root, outing_dir, photos, plan)
     for f, pid, why in refused:
         print("REFUSED by the face guard: %s: %s" % (f.name, why))
-    if refused and not plan:
-        print("nothing left to publish"); return faces.EXIT_REFUSED
 
     print("export dir : %s" % a.export_dir)
     print("starred    : %d   exported files: %d   matched: %d"
@@ -195,6 +196,10 @@ def main(argv=None) -> int:
     for f, pid, gid, date in plan:
         mark = "  [already published]" if gid in known else ""
         print("  %-34s -> %s.jpg   %s%s" % (f.name, gid, date, mark))
+
+    if not plan:
+        print("nothing left to publish" if refused else "nothing matched: nothing to publish")
+        return faces.EXIT_REFUSED if refused else 0
 
     if not a.apply:
         print("\nDRY RUN - pass --apply to write"); return faces.EXIT_REFUSED if refused else 0

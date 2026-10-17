@@ -144,12 +144,13 @@ def face_guard(input_path: Path):
 
     Evan's rule: our kids' faces are never posted. Defence in depth behind the gate in
     publish_external: a master with a detected face gets no variants unless a `faces` event
-    (masked or cleared) exists for its id (the filename stem). Fails CLOSED: a detector that
+    exists for its id (the filename stem): `cleared` by a clearer, or `masked` for this very
+    file (its sha1 is the recorded one). Fails CLOSED: a detector that
     cannot run, an unreadable image or a missing faces module all refuse."""
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent / "tools" / "picker"))
         import faces
-        if faces.has_clearance(Path(input_path).stem):
+        if faces.has_clearance(Path(input_path).stem, image=input_path):
             return None
         found = faces.check_image(input_path, faces.link.load_settings())["faces"]
     except Exception as exc:  # noqa: BLE001
