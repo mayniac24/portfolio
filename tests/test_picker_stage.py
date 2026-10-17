@@ -402,7 +402,8 @@ def _publish_fixture(lib):
     exp = lib["tmp"] / "exports"
     exp.mkdir()
     for stem in ("DSC_0001", "DSC_0003"):
-        (exp / (stem + ".jpg")).write_bytes(b"jpeg " + stem.encode())
+        # a real image: the face guard in publish_external refuses a file it cannot read
+        Image.new("RGB", (64, 48), (len(stem) * 9, 80, 120)).save(exp / (stem + ".jpg"), "JPEG")
     return exp
 
 

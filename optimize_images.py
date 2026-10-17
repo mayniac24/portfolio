@@ -13,8 +13,10 @@ Usage:
     python optimize_images.py
 """
 
+import argparse
 import os
 import re
+import sys
 from pathlib import Path
 
 try:
@@ -136,6 +138,28 @@ def published_metadata(stem: str, source_exif, source_icc, allowed):
 
 JPEG_QUALITY = 85
 
+
+def face_guard(input_path: Path):
+    """None when this source may be published, else the reason it may not.
+
+    Evan's rule: our kids' faces are never posted. Defence in depth behind the gate in
+    publish_external: a master with a detected face gets no variants unless a `faces` event
+    (masked or cleared) exists for its id (the filename stem). Fails CLOSED: a detector that
+    cannot run, an unreadable image or a missing faces module all refuse."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "tools" / "picker"))
+        import faces
+        if faces.has_clearance(Path(input_path).stem):
+            return None
+        found = faces.check_image(input_path, faces.link.load_settings())["faces"]
+    except Exception as exc:  # noqa: BLE001
+        return f"the face check could not run ({exc})"
+    if found:
+        return (f"{len(found)} face(s) detected and no faces event for {Path(input_path).stem}: "
+                "mask it with tools/picker/faces.py mask, or have a face_clearer clear it")
+    return None
+
+
 def get_image_files():
     """Get all JPEG images in the input directory."""
     extensions = {'.jpg', '.jpeg', '.png'}
@@ -150,6 +174,11 @@ def optimize_image(input_path: Path, allowed=None):
     if allowed is None:
         allowed = share_allowlist()
     print(f"Processing: {input_path.name}")
+
+    refused = face_guard(input_path)
+    if refused:
+        print(f"  REFUSED (face guard): {input_path.name}: {refused}")
+        return False
 
     try:
         with Image.open(input_path) as img:
@@ -202,8 +231,13 @@ def optimize_image(input_path: Path, allowed=None):
 
     except Exception as e:
         print(f"  Error processing {input_path.name}: {e}")
+    return True
 
-def main():
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", nargs="+", metavar="STEM",
+                    help="process only these master stems (publish_external passes what it staged)")
+    args = ap.parse_args(argv)
     if not INPUT_DIR.exists():
         print(f"Error: Input directory '{INPUT_DIR}' not found.")
         print("Make sure you're running this from the Portfolio Website directory.")
@@ -212,6 +246,8 @@ def main():
     OUTPUT_DIR.mkdir(exist_ok=True)
 
     image_files = get_image_files()
+    if args.only:
+        image_files = [f for f in image_files if f.stem in set(args.only)]
 
     if not image_files:
         print("No images found to process.")
@@ -219,14 +255,17 @@ def main():
 
     print(f"Found {len(image_files)} images to process.\n")
 
-    for img_path in image_files:
-        optimize_image(img_path)
+    refused = [f.name for f in image_files if optimize_image(f) is False]
 
     print("\n" + "="*60)
     print("OPTIMIZATION COMPLETE")
     print("="*60)
     print(f"\nProcessed {len(image_files)} images.")
     print("Generated responsive sizes: " + ", ".join(f"{s}px" for s in SIZES))
+    if refused:
+        print(f"\nREFUSED by the face guard ({len(refused)}): " + ", ".join(refused))
+        return 3
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

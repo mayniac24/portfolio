@@ -47,6 +47,12 @@ DEFAULTS = {
     "camera_match": "",          # "" = no camera filter; the seeded settings file names one
     "events_module": "",
     "picker_tools": {},
+    # Face guard (tools/picker/faces.py). Neutral: the settings file seeds the real values.
+    "face_tool": "",             # path to faces.py, for other repos to call
+    "face_clearers": [],         # who may `faces.py clear`; absent/empty means nobody
+    "child_relationships": [],   # People-note relationship words or tags that mark a child
+    "face_emoji": "🙂",   # what is drawn over a masked face
+    "face_models_dir": "",       # optional local dir with Haar cascades / a YuNet onnx
 }
 
 
@@ -63,7 +69,8 @@ def settings_path(explicit=None):
 
 
 def load_settings(explicit=None) -> dict:
-    out = {k: (dict(v) if isinstance(v, dict) else v) for k, v in DEFAULTS.items()}
+    out = {k: (dict(v) if isinstance(v, dict) else list(v) if isinstance(v, list) else v)
+           for k, v in DEFAULTS.items()}
     path = settings_path(explicit)
     out["_settings_file"] = str(path) if path is not None else ""   # not a setting: where it was read
     if path is None or not path.is_file():

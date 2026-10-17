@@ -19,6 +19,12 @@ outing folder, so the stem check (and the match) runs within that outing: two
 outings can both hold a DSC_0001. Each NEWLY published frame appends a `post` event
 (channel portfolio) to studio-picker.jsonl; a re-published frame is not a new post.
 Settings, ids and events: tools/picker/studio_link.py.
+
+Face guard (Evan's rule: our kids' faces are never posted): every frame goes through
+`faces.gate` before it can reach the gallery. A refused frame is skipped with its reason, no
+post event is written for it, and the exit code is 3. A frame he has masked is published by
+exporting/placing the `<stem>_masked.jpg` that tools/picker/faces.py wrote next to the export;
+the plain export is then ignored. See tools/picker/faces.py.
 """
 from __future__ import annotations
 
@@ -35,6 +41,7 @@ REPO = HERE.parent
 PICKER = HERE / "picker"
 sys.path.insert(0, str(PICKER))
 import studio_link as link  # noqa: E402
+import faces  # noqa: E402  (the face guard: no child's face is published)
 CORRECTED = REPO.parent / "Portfolio Corrected"
 GALLERY = REPO / "data" / "gallery.json"
 
@@ -61,6 +68,48 @@ def post_events(settings, a, root, outing_dir, photos, plan) -> None:
             posted.add(gid)
         except Exception as exc:  # noqa: BLE001
             print("post event not written for %s: %s" % (gid, exc))
+
+
+def gate_plan(settings, a, root, outing_dir, photos, plan):
+    """Run the face gate on every matched export. -> (kept plan, [(file, pid, reason)], faces rows).
+
+    When a frame has both its plain export and a `_masked` one, the masked one is tried first
+    and the plain one only if that fails. A gate error is a refusal."""
+    by_pid = {}
+    for item in plan:
+        by_pid.setdefault(item[1], []).append(item)
+    chosen, refused, cleared = {}, [], {}
+    for pid, items in by_pid.items():
+        items.sort(key=lambda it: not it[0].stem.lower().endswith("_masked"))
+        try:
+            src = root / pid
+            od = outing_dir or link.outing_dir_of_frame(src, photos[pid].get("outing", ""))
+            oid = link.outing_id_for(settings, root, od, a.events_dir) if od else None
+        except Exception as exc:  # noqa: BLE001
+            refused += [(it[0], pid, "error, so refused: cannot resolve the outing (%s)" % exc) for it in items[:1]]
+            continue
+        res = None
+        for it in items:
+            res = faces.gate(it[0], frame=pid, outing=oid, settings=settings, events_dir=a.events_dir)
+            if res["allowed"]:
+                chosen[pid] = it
+                cleared[pid] = (oid, res.get("state"))
+                break
+        else:
+            refused.append((items[0][0], pid, res["reason"]))
+    return [it for it in plan if chosen.get(it[1]) is it], refused, cleared
+
+
+def record_clearances(settings, a, kept, cleared) -> None:
+    """A published master is looked up by its id (optimize_images' guard): leave a `faces`
+    event for the id when the frame is masked or cleared."""
+    for f, pid, gid, date in kept:
+        oid, state = cleared[pid]
+        if state not in ("masked", "cleared"):
+            continue
+        extra = {"sha1": link.sha1_file(f), "image": link.rel_or_abs(f, CORRECTED)} if state == "masked" else {}
+        faces.record(settings, "key", gid, state, outing=oid, by=a.by, via=a.via, events_dir=a.events_dir,
+                     of=pid, **extra)
 
 
 def main(argv=None) -> int:
@@ -118,6 +167,8 @@ def main(argv=None) -> int:
     plan, unmatched = [], []
     for f in exports:
         stem = f.stem.upper()
+        if stem.endswith("_MASKED"):            # what faces.py mask writes beside an export
+            stem = stem[:-len("_MASKED")]
         # tolerate a Lightroom suffix like DSC_0034-Edit
         pid = next((by_stem[k][0] for k in by_stem if stem == k or stem.startswith(k + "-")), None)
         if pid is None:
@@ -125,6 +176,12 @@ def main(argv=None) -> int:
         date = photos[pid]["date"]
         gid = "%s-%s" % (date.replace("-", ""), Path(pid).stem)
         plan.append((f, pid, gid, date))
+
+    plan, refused, cleared = gate_plan(settings, a, root, outing_dir, photos, plan)
+    for f, pid, why in refused:
+        print("REFUSED by the face guard: %s: %s" % (f.name, why))
+    if refused and not plan:
+        print("nothing left to publish"); return faces.EXIT_REFUSED
 
     print("export dir : %s" % a.export_dir)
     print("starred    : %d   exported files: %d   matched: %d"
@@ -140,7 +197,7 @@ def main(argv=None) -> int:
         print("  %-34s -> %s.jpg   %s%s" % (f.name, gid, date, mark))
 
     if not a.apply:
-        print("\nDRY RUN - pass --apply to write"); return 0
+        print("\nDRY RUN - pass --apply to write"); return faces.EXIT_REFUSED if refused else 0
 
     CORRECTED.mkdir(parents=True, exist_ok=True)
     added = []
@@ -158,13 +215,20 @@ def main(argv=None) -> int:
         GALLERY.write_text(json.dumps(gallery, indent=2) + "\n",
                            encoding="utf-8", newline="\n")
     print("\nstaged %d master(s); %d new gallery entr(ies)" % (len(plan), len(added)))
-    for cmd in (["optimize_images.py"], ["build.py"]):
+    try:
+        record_clearances(settings, a, plan, cleared)
+    except Exception as exc:  # noqa: BLE001 - without it optimize_images refuses the masked master
+        print("faces event not written (%s); optimize_images may refuse a masked or cleared frame" % exc)
+    for cmd in (["optimize_images.py", "--only", *[g for _, _, g, _ in plan]], ["build.py"]):
         r = subprocess.run([sys.executable, *cmd], cwd=REPO,
                            capture_output=True, text=True)
         print("%s -> exit %d" % (cmd[0], r.returncode))
         if r.returncode:
             print(r.stdout[-2000:], r.stderr[-2000:]); return 1
     post_events(settings, a, root, outing_dir, photos, plan)
+    if refused:
+        print("\n%d frame(s) REFUSED by the face guard and not published (exit 3)." % len(refused))
+        return faces.EXIT_REFUSED
     print("\nNothing committed. Review with `git diff` / `git status`, "
           "run `python -m pytest tests/ -q`, then commit.")
     return 0
