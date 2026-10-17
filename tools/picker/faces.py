@@ -877,8 +877,9 @@ def _gate(image, frame, key, outing, settings, events_dir, companions_file, dete
             comp = companion_check(settings, outing, companions_file)
         except Exception:  # noqa: BLE001 - cannot read the People notes: assume the worst
             comp = {"known": True, "children": 0, "unresolved": 1, "unset": False, "error": True}
-        if (comp["children"] or comp["unresolved"] or comp["unset"]) and not (st["auto"] and st["checked"]):
-            return _refuse("children (or companions that cannot be ruled out) are on this outing: the "
+        if ((comp["children"] or comp["unresolved"] or comp["unset"] or not comp["known"])
+                and not (st["auto"] and st["checked"])):
+            return _refuse("children, or companions that cannot be ruled out (unknown, unidentified), are on this outing: the "
                            "mask must come from `faces.py mask --auto --checked-all-faces`",
                            state="masked", companions=comp)
         return _allow("the masked file, no face left in it", state="masked", companions=comp)

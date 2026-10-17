@@ -498,8 +498,8 @@ def test_gate_refuses_a_detected_face_and_allows_a_clean_frame(world, tmp_path, 
 def test_gate_masked_requires_the_masked_file_itself(world, tmp_path):
     img = noise_image(tmp_path / "a.jpg")
     masked = make_masked(img)
-    record_masked(world, "f1", masked)
-    assert _gate(world, masked, frame="f1", outing="o")["allowed"]            # unknown companions: verified mask is enough
+    record_masked(world, "f1", masked, auto=True, checked=True)
+    assert _gate(world, masked, frame="f1", outing="o")["allowed"]            # unknown companions: needs the acknowledged --auto mask
     res = _gate(world, img, frame="f1", outing="o")
     assert not res["allowed"] and "publish the masked file" in res["reason"]
     faces.record(world["settings"], "frame", "f2", "masked", outing="o", events_dir=world["events"])
@@ -534,6 +534,22 @@ def test_gate_masked_with_children_aboard_needs_auto_and_the_acknowledgement(wor
     assert _gate(world, m, frame="f3", outing="out-adults")["allowed"]
 
 
+def test_masked_on_an_outing_with_no_hike_log_needs_the_acknowledgement(world, tmp_path, capsys):
+    """R1: unknown companions are as bad as children for a masked frame. `mask --auto` alone is
+    refused by the gate; with --checked-all-faces it is allowed."""
+    src = noise_image(world["root"] / "Client" / "DSC_0001.jpg")
+    masked = src.with_name("DSC_0001_masked.jpg")
+    args = ("mask", str(src), "--auto", "--frame", "Client/DSC_0001.jpg", "--outing", "out-nolog", "--apply")
+    assert cli(world, *args) == 0
+    res = _gate(world, masked, frame="Client/DSC_0001.jpg", outing="out-nolog")
+    assert not res["allowed"] and "--checked-all-faces" in res["reason"] and res["companions"]["known"] is False
+    assert cli(world, *args, "--checked-all-faces") == 0
+    assert _gate(world, masked, frame="Client/DSC_0001.jpg", outing="out-nolog")["allowed"]
+    # a hike log of adults needs no acknowledgement
+    assert cli(world, "mask", str(src), "--auto", "--frame", "Client/DSC_0001.jpg", "--outing", "out-adults", "--apply") == 0
+    assert _gate(world, masked, frame="Client/DSC_0001.jpg", outing="out-adults")["allowed"]
+
+
 def test_gate_cleared_is_allowed_even_with_a_face_and_a_child_aboard(world, tmp_path):
     img = noise_image(tmp_path / "a.jpg")
     clear_row(world, "f1", outing="out-kids")
@@ -565,7 +581,7 @@ def test_unknown_companions_are_refused(world, tmp_path, no_face):
     clear_row(world, "f1", outing="out-nolog")
     assert _gate(world, img, frame="f1", outing="out-nolog")["allowed"]
     m = make_masked(img)
-    record_masked(world, "f2", m, outing="out-nolog")
+    record_masked(world, "f2", m, outing="out-nolog", auto=True, checked=True)
     assert _gate(world, m, frame="f2", outing="out-nolog")["allowed"]
 
 
