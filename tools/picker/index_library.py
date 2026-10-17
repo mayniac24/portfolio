@@ -7,8 +7,15 @@ deliberately does not score or rank: two attempts at automated quality ranking
 failed (see docs/DECISIONS.md), and this tool exists because the judgement has
 to be the owner's.
 
-    python tools/picker/index_library.py
+    python tools/picker/index_library.py                 # rebuild the whole index
     python tools/picker/index_library.py --root "M:/Photos & Videos/Hiking"
+    python tools/picker/index_library.py --add <outing>  # merge ONE outing in
+
+The camera filter is `camera_match` in _studio_settings.json (default "D3200"): a
+frame is kept when that text is in its EXIF Model or Make. `--camera-match` overrides
+it; `--all-cameras` keeps everything. `--add` never replaces the index: it drops that
+outing's old entries and adds the fresh ones, ids staying relative to the index root
+(photos_root). Index and root come from settings (see studio_link.py).
 """
 
 from __future__ import annotations
@@ -17,18 +24,21 @@ import argparse
 import json
 import math
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from PIL import Image
 from PIL.ExifTags import TAGS
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import studio_link as link  # noqa: E402
+
 Image.MAX_IMAGE_PIXELS = None
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 DEFAULT_ROOT = REPO.parent
-INDEX = HERE / "picker_index.json"
 EXIF_IFD = 0x8769
 LAT, LON = 40.35, -105.55          # Front Range / RMNP
 
@@ -105,21 +115,15 @@ def exif_of(p: Path) -> dict | None:
         return None
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=str(DEFAULT_ROOT))
-    ap.add_argument("--all-cameras", action="store_true",
-                    help="include phone photos (default: real cameras only)")
-    args = ap.parse_args()
-
-    root = Path(args.root)
+def scan(index_root: Path, scan_dir: Path, camera_match: str, all_cameras: bool) -> tuple[list, int]:
+    """Index the JPEGs under scan_dir; ids are relative to index_root. -> (photos, scanned)."""
     photos, scanned = [], 0
-
-    for p in root.rglob("*"):
+    match = camera_match.upper()
+    for p in scan_dir.rglob("*"):
         if p.suffix.lower() not in {".jpg", ".jpeg"}:
             continue
-        if any(part in SKIP_PARTS for part in p.parts) or \
-           any(part.startswith("_Portfolio Cull") for part in p.parts):
+        rel = p.relative_to(index_root)
+        if any(part in SKIP_PARTS for part in rel.parts) or            any(part.startswith("_Portfolio Cull") for part in rel.parts):
             continue
         scanned += 1
         if scanned % 2500 == 0:
@@ -128,8 +132,8 @@ def main() -> None:
         ex = exif_of(p)
         if not ex:
             continue
-        make = str(ex.get("Make", "")).upper()
-        if not args.all_cameras and "NIKON" not in make:
+        model = str(ex.get("Model", ""))
+        if not all_cameras and match not in (model + " " + str(ex.get("Make", ""))).upper():
             continue
 
         raw = str(ex.get("DateTimeOriginal") or ex.get("DateTime") or "")
@@ -140,26 +144,79 @@ def main() -> None:
 
         elev = solar_elevation(when)
         photos.append({
-            "id": str(p.relative_to(root)).replace("\\", "/"),
-            "outing": outing_of(p.relative_to(root)),
+            "id": str(rel).replace("\\", "/"),
+            "outing": outing_of(rel),
             "date": when.strftime("%Y-%m-%d"),
             "time": when.strftime("%H:%M"),
-            "camera": str(ex.get("Model", "")).replace("NIKON ", ""),
+            "camera": model.replace("NIKON ", ""),
             "iso": ex.get("ISOSpeedRatings"),
             "elev": round(elev, 1),
             "light": light_band(elev),
         })
+    return photos, scanned
 
-    photos.sort(key=lambda r: (r["date"], r["time"]))
-    INDEX.write_text(json.dumps({"root": str(root), "photos": photos}, indent=1),
-                     encoding="utf-8", newline="\n")
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", help="library root (default: settings photos_root)")
+    ap.add_argument("--add", metavar="OUTING",
+                    help="index ONE outing folder into the existing index (never replaces it)")
+    ap.add_argument("--all-cameras", action="store_true",
+                    help="include every camera, phones too (default: camera_match only)")
+    ap.add_argument("--camera-match", help="override settings camera_match")
+    ap.add_argument("--settings", help="_studio_settings.json (default: env / $VAULT_PATH)")
+    args = ap.parse_args(argv)
+
+    try:
+        settings = link.load_settings(args.settings)
+    except ValueError as exc:
+        print("error: %s" % exc)
+        return 2
+    index_file = link.index_path(settings)
+    camera_match = args.camera_match or settings.get("camera_match") or link.DEFAULTS["camera_match"]
+
+    if args.add:
+        if index_file.is_file():
+            existing = json.loads(index_file.read_text(encoding="utf-8"))
+            root = Path(args.root or existing["root"])
+            old = existing["photos"]
+        else:
+            try:
+                root = link.photos_root(settings, args.root)
+            except ValueError as exc:
+                print("error: %s" % exc)
+                return 2
+            old = []
+        try:
+            outing_dir = link.resolve_outing_dir(args.add, root)
+            prefix = outing_dir.relative_to(root.resolve()).as_posix() + "/"
+        except (FileNotFoundError, ValueError) as exc:
+            print("error: outing must be a folder under %s (%s)" % (root, exc))
+            return 2
+        fresh, scanned = scan(root.resolve(), outing_dir, camera_match, args.all_cameras)
+        kept = [p for p in old if not p["id"].startswith(prefix)]
+        photos = kept + fresh
+        print(f"--add {prefix}: scanned {scanned}, {len(fresh)} indexed "
+              f"(replacing {len(old) - len(kept)} old entries)")
+        root_text = existing["root"] if index_file.is_file() else str(root)
+    else:
+        root = Path(args.root or settings.get("photos_root") or DEFAULT_ROOT)
+        photos, scanned = scan(root, root, camera_match, args.all_cameras)
+        root_text = str(root)
+
+    photos.sort(key=lambda r: (r["date"], r["time"], r["id"]))
+    index_file.parent.mkdir(parents=True, exist_ok=True)
+    index_file.write_text(json.dumps({"root": root_text, "photos": photos}, indent=1),
+                          encoding="utf-8", newline="\n")
 
     from collections import Counter
-    print(f"\nscanned {scanned}, indexed {len(photos)} -> {INDEX.name}")
+    print(f"\nindexed {len(photos)} -> {index_file.name}  (camera_match "
+          f"{'ALL' if args.all_cameras else repr(camera_match)})")
     print("  by light:", dict(Counter(p["light"] for p in photos)))
     print("  by camera:", dict(Counter(p["camera"] for p in photos)))
     print(f"  outings: {len({p['outing'] for p in photos})}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -11,10 +11,14 @@ optimize_images.py derives the copyright year from the filename, and a Lightroom
 export names files by EXPORT date -- that is how the maternity set ended up
 prefixed 20260202 for photographs taken in August 2025.
 
-    python tools/publish_external.py <export-dir> [--apply]
+    python tools/publish_external.py <export-dir> [--outing <outing>] [--apply]
 
 Matching is on the DSC stem, which is unique within a starred set of this size;
-the script refuses to run if it is not.
+the script refuses to run if it is not. `--outing` limits the starred set to one
+outing folder, so the stem check (and the match) runs within that outing: two
+outings can both hold a DSC_0001. Each NEWLY published frame appends a `post` event
+(channel portfolio) to studio-picker.jsonl; a re-published frame is not a new post.
+Settings, ids and events: tools/picker/studio_link.py.
 """
 from __future__ import annotations
 
@@ -23,26 +27,59 @@ import json
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 PICKER = HERE / "picker"
+sys.path.insert(0, str(PICKER))
+import studio_link as link  # noqa: E402
 CORRECTED = REPO.parent / "Portfolio Corrected"
 GALLERY = REPO / "data" / "gallery.json"
 
 
-def main() -> int:
+def post_events(settings, a, root, outing_dir, photos, plan, new_ids) -> None:
+    """One `post` event (channel portfolio) per newly published frame. Never blocks publishing."""
+    when = datetime.now().astimezone().isoformat(timespec="seconds")
+    for f, pid, gid, date in plan:
+        if gid not in new_ids:
+            continue
+        try:
+            src = root / pid
+            od = outing_dir or link.outing_dir_of_frame(src, photos[pid].get("outing", ""))
+            link.append_event(settings, "post", outing=link.outing_id_for(od) if od else None,
+                              via=a.via, member=a.by or None, events_dir=a.events_dir,
+                              frames=[pid], channel="portfolio", when=when, slug=gid)
+        except Exception as exc:  # noqa: BLE001
+            print("post event not written for %s: %s" % (gid, exc))
+
+
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("export_dir", type=Path)
     ap.add_argument("--apply", action="store_true")
-    a = ap.parse_args()
+    ap.add_argument("--outing", help="limit to one outing folder (absolute, or relative to photos_root)")
+    ap.add_argument("--settings", help="_studio_settings.json (default: env / $VAULT_PATH)")
+    ap.add_argument("--events-dir")
+    ap.add_argument("--via", default="cli")
+    ap.add_argument("--by", default="")
+    a = ap.parse_args(argv)
 
-    sel = json.loads((PICKER / "selections.json").read_text(encoding="utf-8"))
+    settings = link.load_settings(a.settings)
+    sel_file, idx_file = link.selections_path(settings), link.index_path(settings)
+    sel = json.loads(sel_file.read_text(encoding="utf-8"))
+    index = json.loads(idx_file.read_text(encoding="utf-8"))
+    photos = {p["id"]: p for p in index["photos"]}
+    root = link.photos_root(settings) if settings.get("photos_root") else Path(index["root"])
+    outing_dir = None
+    if a.outing:
+        outing_dir = link.resolve_outing_dir(a.outing, root)
+        sel = {i: m for i, m in sel.items()
+               if outing_dir in (root / i).resolve().parents}
+        print("outing     : %s" % outing_dir)
     if not sel:
         print("nothing starred"); return 1
-    index = json.loads((PICKER / "picker_index.json").read_text(encoding="utf-8"))
-    photos = {p["id"]: p for p in index["photos"]}
 
     missing = [i for i, m in sel.items() if not (m.get("alt") or "").strip()]
     if missing:
@@ -118,6 +155,7 @@ def main() -> int:
         print("%s -> exit %d" % (cmd[0], r.returncode))
         if r.returncode:
             print(r.stdout[-2000:], r.stderr[-2000:]); return 1
+    post_events(settings, a, root, outing_dir, photos, plan, {x["id"] for x in added})
     print("\nNothing committed. Review with `git diff` / `git status`, "
           "run `python -m pytest tests/ -q`, then commit.")
     return 0
