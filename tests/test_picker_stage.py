@@ -294,11 +294,48 @@ def test_index_add_without_an_existing_index_builds_one_with_root_from_settings(
     assert [p["id"] for p in idx["photos"]] == [f"{OUTING}/Camera/n1.JPG"]
 
 
-def test_index_default_camera_match_is_d3200_when_settings_absent(tmp_path, monkeypatch):
+def test_camera_match_default_is_empty_and_means_no_filter(lib, monkeypatch):
     link = _load("studio_link", PICKER / "studio_link.py")
     monkeypatch.delenv(link.SETTINGS_ENV, raising=False)
     monkeypatch.delenv("VAULT_PATH", raising=False)
-    assert link.load_settings()["camera_match"] == "D3200"
+    assert link.load_settings()["camera_match"] == ""
+    assert "D3200" not in (PICKER / "studio_link.py").read_text(encoding="utf-8")
+    cfg = json.loads(lib["settings"].read_text(encoding="utf-8"))
+    cfg.pop("camera_match")
+    lib["settings"].write_text(json.dumps(cfg), encoding="utf-8")
+    _jpeg(lib["outing"] / "Camera" / "a.JPG", "NIKON D3200")
+    _jpeg(lib["outing"] / "Camera" / "b.JPG", "NIKON D7500")
+    _jpeg(lib["outing"] / "Phone" / "p.JPG", "Pixel", make="Google")
+    assert index_mod().main(["--settings", str(lib["settings"])]) == 0
+    idx = json.loads((lib["tmp"] / "idx.json").read_text(encoding="utf-8"))
+    assert len(idx["photos"]) == 3
+
+
+def test_index_rebuild_never_lists_the_finish_folder(lib):
+    for n in (1, 2, 3):
+        _jpeg(lib["outing"] / "Camera" / ("DSC_%04d.JPG" % n), "NIKON D3200", when="2026:10:13 10:0%d:00" % n)
+    sel = {f"{OUTING}/Camera/DSC_000{n}.JPG": {"category": "landscape", "alt": "x"} for n in (1, 2)}
+    lib["sel_file"].write_text(json.dumps(sel), encoding="utf-8")
+    assert stage_mod().main(_args(lib, "--apply")) == 0
+    assert len(list(lib["finish"].glob("*.JPG"))) == 2
+    m = index_mod()
+    assert m.main(["--settings", str(lib["settings"])]) == 0
+    ids = [p["id"] for p in json.loads((lib["tmp"] / "idx.json").read_text(encoding="utf-8"))["photos"]]
+    assert len(ids) == 3 and not [i for i in ids if "_Finish" in i]
+    # --add of the outing does not pick them up either, and an absolute finish_dir is honoured
+    assert m.main(["--settings", str(lib["settings"]), "--add", str(lib["outing"])]) == 0
+    cfg = json.loads(lib["settings"].read_text(encoding="utf-8"))
+    cfg["finish_dir"] = str(lib["root"] / "_Finish")
+    lib["settings"].write_text(json.dumps(cfg), encoding="utf-8")
+    assert m.main(["--settings", str(lib["settings"])]) == 0
+    ids = [p["id"] for p in json.loads((lib["tmp"] / "idx.json").read_text(encoding="utf-8"))["photos"]]
+    assert len(ids) == 3
+
+
+def test_index_is_written_atomically(lib):
+    _jpeg(lib["outing"] / "Camera" / "a.JPG", "NIKON D3200")
+    assert index_mod().main(["--settings", str(lib["settings"])]) == 0
+    assert not list(lib["tmp"].glob("idx.json.part"))
 
 
 # ---------------------------------------------------------------- the star route
@@ -323,6 +360,7 @@ def test_star_route_appends_a_pick_event_on_star_and_unstar_only(lib, monkeypatc
     c.post("/api/star/" + pid, json={"alt": "typing", "category": "mountain"})   # an edit: no event
     c.post("/api/star/" + pid, json={"alt": "typing more"})
     assert c.post("/api/star/" + pid, json={"starred": False}).status_code == 200
+    app.flush_picks()
     rows = _rows(lib)
     assert [(r["kind"], r["state"], r["frame"]) for r in rows] == [
         ("pick", "starred", pid), ("pick", "unstarred", pid)]
@@ -335,6 +373,7 @@ def test_star_route_still_stars_when_the_bus_is_unwritable(lib, monkeypatch):
     app = _app(lib, monkeypatch)
     monkeypatch.setenv("MAYNIAC_STUDIO_EVENTS", str(lib["tmp"] / "photos" / lib["ids"][0]))  # a file, not a dir
     r = app.app.test_client().post("/api/star/" + lib["ids"][1], json={})
+    app.flush_picks()
     assert r.status_code == 200 and r.get_json()["starred"] == 1
 
 
@@ -392,4 +431,237 @@ def test_publish_external_writes_a_post_event_per_new_frame_and_scopes_to_an_out
     assert len(json.loads(gallery.read_text(encoding="utf-8"))["photos"]) == 2
     # re-publishing the same frames is not a new post
     assert m.main(base + ["--outing", str(lib["outing"]), "--apply"]) == 0
+    assert len([r for r in _rows(lib) if r["kind"] == "post"]) == 2
+
+
+# ---------------------------------------------------------------- outing ids match the sorter's
+
+LT = Path(r"C:\Users\Evan-PC\Documents\Organize IT\Notes\The inner ravings of a mayniac"
+          r"\000 System\050 Architecture\052 System Utilities\life-timeline")
+FOLDER = OUTING
+
+
+def _link():
+    return _load("studio_link", PICKER / "studio_link.py")
+
+
+def _settings_of(lib):
+    return _link().load_settings(lib["settings"])
+
+
+def _write_events(lib, name, rows):
+    lib["events"].mkdir(exist_ok=True)
+    with open(lib["events"] / name, "a", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps({"v": 2, "source": "studio", "kind": "outing", **r}) + "\n")
+
+
+def test_outing_id_comes_from_the_sorters_create_row_not_from_hashing(lib):
+    _write_events(lib, "studio-sort.jsonl", [
+        {"ts": "2026-10-13T20:00:00-06:00", "op": "create", "outing": "out-1234567890", "folder": FOLDER}])
+    link = _link()
+    assert link.outing_id_for(_settings_of(lib), lib["root"], lib["outing"], lib["events"]) == "out-1234567890"
+    stage_mod().main(_args(lib, "--apply"))
+    assert {r["outing"] for r in _rows(lib)} == {"out-1234567890"}
+
+
+def test_outing_id_follows_rename_and_merge_rows(lib):
+    new = "Hiking/2026/10.13.26 - Renamed"
+    _write_events(lib, "studio-sort.jsonl", [
+        {"ts": "2026-10-13T20:00:00-06:00", "op": "create", "outing": "out-aaaaaaaaaa", "folder": FOLDER},
+        {"ts": "2026-10-13T20:00:01-06:00", "op": "create", "outing": "out-bbbbbbbbbb", "folder": "Hiking/2026/other"}])
+    _write_events(lib, "studio-cli.jsonl", [
+        {"ts": "2026-10-14T08:00:00-06:00", "op": "rename", "outing": "out-aaaaaaaaaa", "folder": new,
+         "to": new, "from": FOLDER}])
+    link, st = _link(), _settings_of(lib)
+    renamed = lib["root"] / new
+    renamed.mkdir(parents=True)
+    assert link.outing_id_for(st, lib["root"], renamed, lib["events"]) == "out-aaaaaaaaaa"
+    _write_events(lib, "studio-cli.jsonl", [
+        {"ts": "2026-10-15T08:00:00-06:00", "op": "merge", "outing": "out-bbbbbbbbbb", "folder": "Hiking/2026/other",
+         "from": ["out-aaaaaaaaaa"]}])
+    assert link.outing_id_for(st, lib["root"], renamed, lib["events"]) == "out-bbbbbbbbbb"   # cache sees the new row
+
+
+def test_projection_file_is_consulted_before_the_events(lib):
+    _write_events(lib, "studio-sort.jsonl", [
+        {"ts": "2026-10-13T20:00:00-06:00", "op": "create", "outing": "out-fromevents", "folder": FOLDER}])
+    (lib["tmp"] / "_studio_outings.json").write_text(json.dumps(
+        {"outings": [{"id": "out-fromproject", "folder": FOLDER}]}), encoding="utf-8")
+    assert _link().outing_id_for(_settings_of(lib), lib["root"], lib["outing"], lib["events"]) == "out-fromproject"
+
+
+def test_fallback_hash_uses_the_sorters_extension_set(lib):
+    link = _link()
+    for name in ("a.heic", "b.cr3", "c.webp", "d.arw", "e.heif", "f.cr2", "g.txt", "h.mp4"):
+        (lib["outing"] / "Camera" / name).write_bytes(b"x")
+    got = {p.name for p in link.stills_in(lib["outing"])}
+    assert {"a.heic", "b.cr3", "c.webp", "d.arw", "e.heif", "f.cr2"} <= got
+    assert "g.txt" not in got and "h.mp4" not in got
+
+
+@pytest.mark.skipif(not (LT / "scanners" / "outing_sort.py").is_file(), reason="sorter not on this machine")
+def test_fallback_id_equals_the_real_sorters_id(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(LT / "lib"))
+    monkeypatch.syspath_prepend(str(LT / "scanners"))
+    spec = importlib.util.spec_from_file_location("lt_outing_sort", LT / "scanners" / "outing_sort.py")
+    sorter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sorter)
+    dump = tmp_path / "dump" / "Card"
+    # EXIF order is the OPPOSITE of mtime order: capture time must win, as in the sorter
+    shots = [("late.JPG", "2026:10:13 11:00:00", (10, 0, 0), T0),
+             ("early.JPG", "2026:10:13 09:00:00", (0, 10, 0), T0 + 900),
+             ("mid.JPG", "2026:10:13 10:00:00", (0, 0, 10), T0 + 100)]
+    for name, when, colour, mtime in shots:
+        f = dump / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        ex = Image.Exif()
+        ex[0x0110] = "Cam"
+        ex.get_ifd(0x8769)[0x9003] = when
+        Image.new("RGB", (16, 16), colour).save(f, "JPEG", exif=ex)
+        os.utime(f, (mtime, mtime))
+    s = dict(sorter.DEFAULTS, photos_root=str(tmp_path / "photos"))
+    plan = sorter.plan_dump(str(dump.parent), s)
+    assert len(plan["outings"]) == 1
+    assert _link().hash_outing_id(dump.parent) == plan["outings"][0]["id"]
+
+
+# ---------------------------------------------------------------- stage: atomic and verified
+
+def test_stage_refuses_a_target_that_is_not_a_copy_of_the_source(lib, capsys):
+    lib["finish"].mkdir(parents=True)
+    (lib["finish"] / "DSC_0003.JPG").write_bytes(b"his own file")
+    assert stage_mod().main(_args(lib, "--apply")) == 1
+    assert (lib["finish"] / "DSC_0003.JPG").read_bytes() == b"his own file"
+    assert "refusing" in capsys.readouterr().out
+    names = sorted(p.name for p in lib["finish"].glob("*.JPG"))
+    assert names == ["DSC_0001.JPG", "DSC_0003.JPG", "DSC_0005.JPG"]     # the others were staged
+    assert [r["frame"] for r in _rows(lib)] == [lib["ids"][0], lib["ids"][4]]
+
+
+def test_stage_adopts_an_identical_copy_left_by_an_interrupted_run(lib):
+    import shutil
+    lib["finish"].mkdir(parents=True)
+    shutil.copy2(lib["root"] / lib["ids"][0], lib["finish"] / "DSC_0001.JPG")
+    assert stage_mod().main(_args(lib, "--apply")) == 0
+    assert len(_rows(lib)) == 3
+
+
+def test_stage_leaves_no_part_file_and_survives_one_failed_copy(lib, monkeypatch, capsys):
+    m = stage_mod()
+    real = m.shutil.copy2
+
+    def flaky(src, dst, *a, **k):
+        if str(src).endswith("DSC_0003.JPG"):
+            Path(dst).write_bytes(b"half")                # a partial file, then the failure
+            raise OSError("disk full")
+        return real(src, dst, *a, **k)
+    monkeypatch.setattr(m.shutil, "copy2", flaky)
+    assert m.main(_args(lib, "--apply")) == 1
+    assert sorted(p.name for p in lib["finish"].iterdir() if p.is_file()) == [
+        ".staged.json", "DSC_0001.JPG", "DSC_0005.JPG"]
+    assert [r["frame"] for r in _rows(lib)] == [lib["ids"][0], lib["ids"][4]]
+    assert "disk full" in capsys.readouterr().out
+    monkeypatch.setattr(m.shutil, "copy2", real)
+    assert m.main(_args(lib, "--apply")) == 0                 # the rerun finishes the job
+    assert len(_rows(lib)) == 3
+
+
+def test_stage_detects_a_copy_that_does_not_match_the_source(lib, monkeypatch):
+    m = stage_mod()
+    real = m.shutil.copy2
+
+    def bad(s, d, *a, **k):
+        real(s, d, *a, **k)
+        Path(d).write_bytes(b"bad")
+    monkeypatch.setattr(m.shutil, "copy2", bad)
+    assert m.main(_args(lib, "--apply")) == 1
+    assert not list(lib["finish"].glob("*.JPG")) and not list(lib["finish"].glob("*.part"))
+    assert not lib["events"].exists()
+
+
+def test_stage_refuses_a_finish_folder_staged_for_another_outing(lib, capsys):
+    stage_mod().main(_args(lib, "--apply", "--outing-id", "out-first00000"))
+    capsys.readouterr()
+    assert stage_mod().main(_args(lib, "--apply", "--outing-id", "out-second0000")) == 1
+    assert "two outings cannot share" in capsys.readouterr().out
+
+
+def test_stage_copies_nothing_when_the_event_directory_cannot_be_resolved(lib, monkeypatch):
+    monkeypatch.delenv("MAYNIAC_STUDIO_EVENTS", raising=False)
+    args = [str(lib["outing"]), "--settings", str(lib["settings"]), "--apply"]     # no --events-dir
+    assert stage_mod().main(args) == 2
+    assert not lib["finish"].exists()
+
+
+# ---------------------------------------------------------------- finish: what counts
+
+def test_the_two_second_slack_is_pinned(lib, capsys):
+    stage_mod().main(_args(lib, "--apply"))
+    capsys.readouterr()
+    src_t = T0 + 3 * 60                                     # DSC_0003's capture mtime
+    for plus, want in ((1.9, 0), (2.5, 1)):
+        for f in lib["finish"].glob("*.tif"):
+            f.unlink()
+        p = lib["finish"] / "DSC_0003.tif"
+        p.write_bytes(b"different bytes")
+        os.utime(p, (src_t + plus, src_t + plus))
+        finish_mod().main(_args(lib))
+        assert "finished %d of 3" % want in capsys.readouterr().out
+
+
+def test_byte_identical_copy_with_a_new_mtime_is_not_finished(lib, capsys):
+    stage_mod().main(_args(lib, "--apply"))
+    capsys.readouterr()
+    p = lib["finish"] / "DSC_0001-copy.JPG"
+    p.write_bytes((lib["root"] / lib["ids"][0]).read_bytes())
+    os.utime(p, (T0 + 99999, T0 + 99999))
+    finish_mod().main(_args(lib))
+    assert "finished 0 of 3" in capsys.readouterr().out
+
+
+def test_finished_counts_only_frames_still_starred(lib, capsys):
+    stage_mod().main(_args(lib, "--apply"))
+    _export(lib, "DSC_0003", ".tif")
+    sel = json.loads(lib["sel_file"].read_text(encoding="utf-8"))
+    sel.pop(lib["ids"][2])
+    lib["sel_file"].write_text(json.dumps(sel), encoding="utf-8")
+    capsys.readouterr()
+    finish_mod().main(_args(lib))
+    assert "finished 0 of 2" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- the star stays instant
+
+def test_star_does_not_wait_for_the_event_write(lib, monkeypatch):
+    import time
+    app = _app(lib, monkeypatch)
+    real = app.studio_link.append_event
+
+    def slow(*a, **k):
+        time.sleep(0.6)
+        return real(*a, **k)
+    monkeypatch.setattr(app.studio_link, "append_event", slow)
+    t = time.time()
+    assert app.app.test_client().post("/api/star/" + lib["ids"][1], json={}).status_code == 200
+    assert time.time() - t < 0.4
+    app.flush_picks()
+    assert len(_rows(lib)) == 1
+
+
+# ---------------------------------------------------------------- publish: a post is decided by its event
+
+def test_publish_external_decides_new_by_post_event_not_by_gallery(lib, monkeypatch):
+    m, gallery, calls = _publisher(lib, monkeypatch)
+    exp = _publish_fixture(lib)
+    base = [str(exp), "--settings", str(lib["settings"]), "--events-dir", str(lib["events"]),
+            "--outing", str(lib["outing"]), "--apply"]
+    # DSC_0001 is already in the gallery (published before the bus): it still gets its first post event
+    gallery.write_text(json.dumps({"photos": [{"id": "20261013-DSC_0001", "category": "landscape",
+                                                "attributes": [], "alt": "old"}]}), encoding="utf-8")
+    assert m.main(base) == 0
+    assert sorted(r["slug"] for r in _rows(lib) if r["kind"] == "post") == ["20261013-DSC_0001", "20261013-DSC_0003"]
+    # a gallery wiped and rebuilt does not make them new again
+    gallery.write_text(json.dumps({"photos": []}), encoding="utf-8")
+    assert m.main(base) == 0
     assert len([r for r in _rows(lib) if r["kind"] == "post"]) == 2

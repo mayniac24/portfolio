@@ -23,6 +23,7 @@ import io
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_file
@@ -77,19 +78,31 @@ def save_selections(sel: dict) -> None:
     SELECTIONS.write_text(json.dumps(sel, indent=1), encoding="utf-8", newline="\n")
 
 
-def record_pick(photo_id: str, state: str, meta: dict | None = None) -> None:
-    """Append a `pick` event (starred / unstarred) to studio-picker.jsonl.
+# Pick events go out on one worker thread, in order, so the star never waits on the bus or on
+# resolving the outing id. Python joins the worker at exit, so a queued event still lands.
+_PICKS = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pick-events")
 
-    Never raises: the star must land even when the bus is unreachable.
-    """
+
+def record_pick(photo_id: str, state: str, meta: dict | None = None) -> None:
+    """Queue a `pick` event (starred / unstarred) for studio-picker.jsonl. Never raises."""
+    meta = dict(meta or {})
+    _PICKS.submit(_write_pick, photo_id, state, meta)
+
+
+def flush_picks() -> None:
+    """Block until every queued pick event has been written (tests, shutdown)."""
+    _PICKS.submit(lambda: None).result()
+
+
+def _write_pick(photo_id: str, state: str, meta: dict) -> None:
     try:
         src = ROOT / photo_id
         outing_dir = studio_link.outing_dir_of_frame(src, PHOTOS[photo_id].get("outing", ""))
-        outing = studio_link.outing_id_for(outing_dir) if outing_dir else None
+        outing = (studio_link.outing_id_for(SETTINGS, PHOTOS_ROOT, outing_dir)
+                  if outing_dir else None)
         studio_link.append_event(SETTINGS, "pick", outing=outing,
                                  frame=studio_link.frame_id(src, PHOTOS_ROOT), state=state,
-                                 category=(meta or {}).get("category", ""),
-                                 alt=(meta or {}).get("alt", ""))
+                                 category=meta.get("category", ""), alt=meta.get("alt", ""))
     except Exception as exc:  # noqa: BLE001
         print(f"pick event not written: {exc}", file=sys.stderr)
 

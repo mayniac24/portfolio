@@ -3,9 +3,11 @@
 
 COPIES every starred frame of one outing (selections.json) into
 `<photos_root>/<finish_dir>/<outing name>/` and writes one `pick` event per frame
-to `studio-picker.jsonl`. Nothing is moved, deleted or overwritten: the originals
-stay where they are, and a file already staged (he may be editing it in place) is
-left alone. Prints the folder to import into Lightroom.
+to `studio-picker.jsonl`. Nothing is moved, deleted or overwritten. Each copy goes to
+`<name>.part`, is checked against the source (size and SHA-1), then renamed into place,
+so a crash never leaves a half file that looks staged. A file already in the folder
+that is not a copy of the source (he may be editing it in place) is refused, not
+adopted. Prints the folder to import into Lightroom.
 
     python tools/picker/stage_picks.py <outing folder> [--apply]
 
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -40,17 +43,48 @@ def starred_in_outing(selections: dict, root: Path, outing_dir: Path) -> list:
     return out
 
 
-def load_manifest(dest: Path) -> dict:
+def read_manifest(dest: Path) -> dict:
+    """{'outing': id or None, 'frames': {frame id: {name, src_mtime_ns, bytes, sha1}}}"""
     f = dest / MANIFEST
     if f.is_file():
         try:
-            return json.loads(f.read_text(encoding="utf-8")).get("frames", {})
+            data = json.loads(f.read_text(encoding="utf-8"))
+            return {"outing": data.get("outing"), "frames": data.get("frames") or {}}
         except ValueError:
             pass
-    return {}
+    return {"outing": None, "frames": {}}
+
+
+def load_manifest(dest: Path) -> dict:
+    return read_manifest(dest)["frames"]
+
+
+def write_manifest(dest: Path, outing, frames: dict) -> None:
+    tmp = dest / (MANIFEST + ".part")
+    tmp.write_text(json.dumps({"outing": outing, "frames": frames}, indent=1), encoding="utf-8", newline="\n")
+    os.replace(tmp, dest / MANIFEST)
+
+
+def copy_verified(src: Path, target: Path, sha1: str) -> None:
+    """Copy via `<target>.part`, verify size and SHA-1 against the source, then rename."""
+    part = target.with_name(target.name + ".part")
+    try:
+        if part.exists():
+            part.unlink()
+        shutil.copy2(src, part)
+        if part.stat().st_size != src.stat().st_size or link.sha1_file(part) != sha1:
+            raise OSError("copy does not match the source (size or SHA-1)")
+        os.replace(part, target)
+    except BaseException:
+        try:
+            part.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def main(argv=None) -> int:
+    link.stdout_utf8()
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("outing", help="outing folder (absolute, or relative to photos_root)")
     ap.add_argument("--apply", action="store_true", help="copy and write events (default: dry run)")
@@ -58,7 +92,7 @@ def main(argv=None) -> int:
     ap.add_argument("--photos-root")
     ap.add_argument("--selections", help="selections.json (default: settings picker_tools.selections)")
     ap.add_argument("--events-dir")
-    ap.add_argument("--outing-id", help="override the computed outing id")
+    ap.add_argument("--outing-id", help="override the resolved outing id")
     ap.add_argument("--via", default="cli", help="cli | horizons | horizons-web | phone")
     ap.add_argument("--by", default="", help="member who acted (recorded as `member`)")
     a = ap.parse_args(argv)
@@ -98,40 +132,59 @@ def main(argv=None) -> int:
             print("  " + fid)
         return 1
 
-    manifest = load_manifest(dest)
+    outing = a.outing_id or link.outing_id_for(settings, root, outing_dir, a.events_dir)
+    mf = read_manifest(dest)
+    manifest = mf["frames"]
+    if manifest and mf["outing"] and outing and mf["outing"] != outing:
+        print("error: %s was staged for outing %s, this outing is %s; two outings cannot share a "
+              "finish folder (rename one)" % (dest, mf["outing"], outing))
+        return 1
     todo = [p for p in picks if p[0] not in manifest]
     for fid, src, _ in picks:
-        mark = "already staged" if fid in manifest else "copy"
-        print("  %-14s %s" % (mark, fid))
+        print("  %-14s %s" % ("already staged" if fid in manifest else "copy", fid))
 
     if not a.apply:
         print("\nDRY RUN - pass --apply to copy %d frame(s) and write %d pick event(s)" % (len(todo), len(todo)))
         return 0
 
-    outing = a.outing_id or link.outing_id_for(outing_dir)
+    try:                                   # the bus has to be reachable BEFORE anything is copied
+        link.resolve_events_dir(settings, a.events_dir)
+    except (RuntimeError, OSError, KeyError, FileNotFoundError) as exc:
+        print("error: no event directory, nothing copied: %s" % exc)
+        return 2
+
     dest.mkdir(parents=True, exist_ok=True)
-    kept = 0
-    for fid, src, meta in todo:
-        target = dest / src.name
-        if target.exists():
-            kept += 1                   # never overwrite a file that is already there
-        else:
-            shutil.copy2(src, target)
-        manifest[fid] = {"name": src.name, "src_mtime_ns": src.stat().st_mtime_ns,
-                         "bytes": src.stat().st_size}
-        try:
-            link.append_event(settings, "pick", outing=outing, via=a.via, member=a.by or None,
-                              events_dir=a.events_dir, frame=fid, state="starred",
-                              category=meta.get("category", ""), alt=meta.get("alt", ""))
-        except (RuntimeError, OSError, KeyError, FileNotFoundError) as exc:
-            print("error: could not write the pick event for %s: %s" % (fid, exc))
-            (dest / MANIFEST).write_text(json.dumps({"outing": outing, "frames": {
-                k: v for k, v in manifest.items() if k != fid}}, indent=1), encoding="utf-8", newline="\n")
-            return 2
-    (dest / MANIFEST).write_text(json.dumps({"outing": outing, "frames": manifest}, indent=1),
-                                 encoding="utf-8", newline="\n")
+    staged, adopted, failed = 0, 0, []
+    try:
+        for fid, src, meta in todo:
+            target = dest / src.name
+            try:
+                sha = link.sha1_file(src)
+                if target.exists():
+                    if link.sha1_file(target) != sha:
+                        raise OSError("%s already exists and is not a copy of the source; refusing to "
+                                      "overwrite or adopt it" % target.name)
+                    adopted += 1           # an identical copy from an interrupted run
+                else:
+                    copy_verified(src, target, sha)
+                st = src.stat()
+                manifest[fid] = {"name": src.name, "src_mtime_ns": st.st_mtime_ns,
+                                 "bytes": st.st_size, "sha1": sha}
+                link.append_event(settings, "pick", outing=outing, via=a.via, member=a.by or None,
+                                  events_dir=a.events_dir, frame=fid, state="starred",
+                                  category=meta.get("category", ""), alt=meta.get("alt", ""))
+                staged += 1
+            except OSError as exc:
+                failed.append(fid)
+                manifest.pop(fid, None)
+                print("error: %s: %s" % (fid, exc))
+    finally:
+        write_manifest(dest, outing, manifest)
     print("\nstaged %d frame(s), %d pick event(s)%s" % (
-        len(todo), len(todo), (", %d already in place, left alone" % kept) if kept else ""))
+        staged, staged, (", %d already in place and identical" % adopted) if adopted else ""))
+    if failed:
+        print("FAILED %d frame(s); fix and rerun" % len(failed))
+        return 1
     print("Import into Lightroom: %s" % dest)
     return 0
 

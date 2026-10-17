@@ -4,8 +4,9 @@
 He finishes frames by hand (Lightroom or Camera Raw) and exports full size into
 `<photos_root>/<finish_dir>/<outing name>/`. This looks, never edits. A staged
 frame is FINISHED when that folder holds a file with its stem (or `<stem>-...`,
-Lightroom's `-Edit`) whose mtime is newer than the original's capture file. The
-unchanged staged copy keeps the original's mtime, so it never counts.
+Lightroom's `-Edit`) whose mtime is more than 2 s newer than the original's AND whose
+bytes (SHA-1) differ from the staged copy, so the untouched staged copy, a `touch` and a
+byte-identical copy never count. Only frames still starred are counted.
 
     python tools/picker/finish_watch.py <outing folder> [--apply]
 
@@ -23,14 +24,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import studio_link as link  # noqa: E402
-from stage_picks import MANIFEST, load_manifest, starred_in_outing  # noqa: E402
+from stage_picks import MANIFEST, read_manifest, starred_in_outing  # noqa: E402
 
 #: exFAT stores mtimes at 2 s resolution; an edit is days later, a copy is within rounding.
 SLACK_NS = 2_000_000_000
 
 
-def find_export(finish_dir: Path, name: str, src_mtime_ns: int):
-    """The newest file in finish_dir for staged file `name` that is newer than the original."""
+def find_export(finish_dir: Path, name: str, src_mtime_ns: int, staged_sha1=None):
+    """The newest file in finish_dir for staged file `name` that is newer than the original
+    (by more than SLACK_NS) and not byte-identical to the staged copy."""
     stem = Path(name).stem.lower()
     best = None
     for p in finish_dir.iterdir():
@@ -42,12 +44,15 @@ def find_export(finish_dir: Path, name: str, src_mtime_ns: int):
         st = p.stat()
         if st.st_mtime_ns <= src_mtime_ns + SLACK_NS:
             continue
+        if staged_sha1 and link.sha1_file(p) == staged_sha1:
+            continue
         if best is None or st.st_mtime_ns > best[1]:
             best = (p, st.st_mtime_ns, st.st_size)
     return best
 
 
 def main(argv=None) -> int:
+    link.stdout_utf8()
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("outing", help="outing folder (absolute, or relative to photos_root)")
     ap.add_argument("--apply", action="store_true", help="write finish events (default: dry run)")
@@ -68,14 +73,18 @@ def main(argv=None) -> int:
         print("error: %s" % exc)
         return 2
     finish_dir = link.finish_folder(settings, root, outing_dir)
-    manifest = load_manifest(finish_dir)
-    if not manifest:
-        # No manifest (staged by hand, or before this tool): fall back to the stars.
-        sel_file = Path(a.selections) if a.selections else link.selections_path(settings)
-        selections = json.loads(sel_file.read_text(encoding="utf-8")) if sel_file.is_file() else {}
-        for fid, src, _ in starred_in_outing(selections, root, outing_dir):
-            if src.is_file() and (finish_dir / src.name).is_file():
-                manifest[fid] = {"name": src.name, "src_mtime_ns": src.stat().st_mtime_ns}
+    manifest = dict(read_manifest(finish_dir)["frames"])
+    sel_file = Path(a.selections) if a.selections else link.selections_path(settings)
+    starred = None
+    if sel_file.is_file():
+        selections = json.loads(sel_file.read_text(encoding="utf-8"))
+        starred = {fid: src for fid, src, _ in starred_in_outing(selections, root, outing_dir)}
+        if not manifest:
+            # No manifest (staged by hand, or before this tool): fall back to the stars.
+            for fid, src in starred.items():
+                if src.is_file() and (finish_dir / src.name).is_file():
+                    manifest[fid] = {"name": src.name, "src_mtime_ns": src.stat().st_mtime_ns}
+        manifest = {k: v for k, v in manifest.items() if k in starred}   # unstarred = out of the count
     if not finish_dir.is_dir() or not manifest:
         print("nothing staged for %s (run stage_picks.py first)" % outing_dir.name)
         print("finished 0 of 0")
@@ -89,7 +98,10 @@ def main(argv=None) -> int:
     finished, fresh = [], []
     for fid in sorted(manifest):
         m = manifest[fid]
-        found = find_export(finish_dir, m["name"], m["src_mtime_ns"])
+        sha = m.get("sha1")
+        if not sha and (root / fid).is_file():
+            sha = link.sha1_file(root / fid)
+        found = find_export(finish_dir, m["name"], m["src_mtime_ns"], sha)
         if not found:
             continue
         path, _, size = found
@@ -98,7 +110,7 @@ def main(argv=None) -> int:
         if (fid, export, size) not in seen:
             fresh.append((fid, export, size))
 
-    outing = a.outing_id or (link.outing_id_for(outing_dir) if a.apply and fresh else None)
+    outing = a.outing_id or (link.outing_id_for(settings, root, outing_dir, a.events_dir) if a.apply and fresh else None)
     for fid, export, size in fresh:
         print("  finished  %s  <- %s" % (fid, export))
         if a.apply:

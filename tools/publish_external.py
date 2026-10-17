@@ -39,23 +39,32 @@ CORRECTED = REPO.parent / "Portfolio Corrected"
 GALLERY = REPO / "data" / "gallery.json"
 
 
-def post_events(settings, a, root, outing_dir, photos, plan, new_ids) -> None:
-    """One `post` event (channel portfolio) per newly published frame. Never blocks publishing."""
+def post_events(settings, a, root, outing_dir, photos, plan) -> None:
+    """One `post` event (channel portfolio) per published frame that has none yet.
+
+    "New" means no post event with that slug exists in studio-picker.jsonl: the gallery
+    can hold a photo published long before the bus, and a re-export is not a second post.
+    Never blocks publishing."""
     when = datetime.now().astimezone().isoformat(timespec="seconds")
+    posted = {r.get("slug") for r in link.read_own_events(settings, a.events_dir)
+              if r.get("kind") == "post" and r.get("channel") == "portfolio"}
     for f, pid, gid, date in plan:
-        if gid not in new_ids:
+        if gid in posted:
             continue
         try:
             src = root / pid
             od = outing_dir or link.outing_dir_of_frame(src, photos[pid].get("outing", ""))
-            link.append_event(settings, "post", outing=link.outing_id_for(od) if od else None,
+            link.append_event(settings, "post",
+                              outing=link.outing_id_for(settings, root, od, a.events_dir) if od else None,
                               via=a.via, member=a.by or None, events_dir=a.events_dir,
                               frames=[pid], channel="portfolio", when=when, slug=gid)
+            posted.add(gid)
         except Exception as exc:  # noqa: BLE001
             print("post event not written for %s: %s" % (gid, exc))
 
 
 def main(argv=None) -> int:
+    link.stdout_utf8()
     ap = argparse.ArgumentParser()
     ap.add_argument("export_dir", type=Path)
     ap.add_argument("--apply", action="store_true")
@@ -155,7 +164,7 @@ def main(argv=None) -> int:
         print("%s -> exit %d" % (cmd[0], r.returncode))
         if r.returncode:
             print(r.stdout[-2000:], r.stderr[-2000:]); return 1
-    post_events(settings, a, root, outing_dir, photos, plan, {x["id"] for x in added})
+    post_events(settings, a, root, outing_dir, photos, plan)
     print("\nNothing committed. Review with `git diff` / `git status`, "
           "run `python -m pytest tests/ -q`, then commit.")
     return 0
