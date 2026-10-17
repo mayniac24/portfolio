@@ -3,3 +3,5 @@ pytest>=8
 
 # tools/picker only — not needed to build or deploy the site
 flask>=3
+numpy>=1.26
+pyyaml>=6
