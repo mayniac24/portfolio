@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from stage_picks import MANIFEST, read_manifest, starred_in_outing  # noqa: E402
 
 #: exFAT stores mtimes at 2 s resolution; an edit is days later, a copy is within rounding.
 SLACK_NS = 2_000_000_000
+#: `<stem>_helper.jpg` (candidate) and `<stem>_pre-helper[-n].<ext>` (replaced export), from tweak.py.
+HELPER_FILE = re.compile(r"_(pre-)?helper(-\d+)?$")
 
 
 def find_export(finish_dir: Path, name: str, src_mtime_ns: int, staged_sha1=None):
@@ -39,6 +42,8 @@ def find_export(finish_dir: Path, name: str, src_mtime_ns: int, staged_sha1=None
         if not p.is_file() or p.name == MANIFEST or p.suffix.lower() not in link.STILL_SUFFIXES:
             continue
         s = p.stem.lower()
+        if HELPER_FILE.search(s):          # tweak.py's candidate and replaced exports are not his exports
+            continue
         if s != stem and not s.startswith(stem + "-"):
             continue
         st = p.stat()

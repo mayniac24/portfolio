@@ -1,0 +1,4 @@
+# Finish-helper recipes (DESIGN-2026-10-17 D16). Data, not code.
+# Exactly one writer: `python tools/picker/tweak.py recipe save|edit|retire --apply`.
+# Do not hand-edit; comments are rewritten on every save.
+recipes: []
