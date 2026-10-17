@@ -32,6 +32,7 @@ from PIL import Image, ImageOps
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import correct_colour  # noqa: E402
+import faces  # noqa: E402  (the face guard)
 import studio_link  # noqa: E402
 
 Image.MAX_IMAGE_PIXELS = None
@@ -202,6 +203,26 @@ def publish_one(photo_id: str, meta: dict) -> str:
     return stem
 
 
+def gate_starred(sel: dict):
+    """Run the face gate on every starred frame BEFORE anything is written.
+    -> ({photo_id: gate result for the allowed}, [{"id", "reason"} for the refused])."""
+    ok, refused = {}, []
+    for photo_id in sel:
+        try:
+            src = ROOT / photo_id
+            od = studio_link.outing_dir_of_frame(src, PHOTOS[photo_id].get("outing", ""))
+            oid = studio_link.outing_id_for(SETTINGS, PHOTOS_ROOT, od) if od else None
+            res = faces.gate(src, frame=studio_link.frame_id(src, PHOTOS_ROOT), outing=oid, settings=SETTINGS)
+            res["_outing"] = oid
+        except Exception as exc:  # noqa: BLE001 - unknown means refuse
+            res = {"allowed": False, "reason": f"error, so refused: {exc}"}
+        if res["allowed"]:
+            ok[photo_id] = res
+        else:
+            refused.append({"id": photo_id, "reason": res["reason"]})
+    return ok, refused
+
+
 @app.route("/api/publish", methods=["POST"])
 def api_publish():
     sel = load_selections()
@@ -213,12 +234,28 @@ def api_publish():
                         "error": f"{len(missing)} starred photo(s) need alt text",
                         "missing": missing[:10]}), 400
 
+    # Evan's rule: no child's face is published. Gate every starred frame first; one refusal
+    # stops the whole publish with nothing written (no master, no gallery entry, no build).
+    cleared, refused = gate_starred(sel)
+    if refused:
+        return jsonify({"ok": False, "error": f"{len(refused)} starred frame(s) refused by the face guard "
+                        "(see tools/picker/faces.py); nothing was written", "refused": refused}), 409
+
     gallery = json.loads(GALLERY.read_text(encoding="utf-8"))
     known = {p["id"] for p in gallery["photos"]}
-    log, added = [], []
+    log, added, stems = [], [], []
 
     for photo_id, meta in sel.items():
         stem = publish_one(photo_id, meta)
+        stems.append(stem)
+        res = cleared[photo_id]
+        if res.get("state") in ("masked", "cleared"):
+            # optimize_images' own guard looks the master up by its id
+            try:
+                faces.record(SETTINGS, "key", stem, res["state"], outing=res.get("_outing"), via="picker",
+                             cleared_by=res.get("by"), of=studio_link.frame_id(ROOT / photo_id, PHOTOS_ROOT))
+            except Exception as exc:  # noqa: BLE001
+                log.append(f"faces event not written for {stem}: {exc}")
         if stem in known:
             log.append(f"skip {stem} (already published)")
             continue
@@ -234,7 +271,7 @@ def api_publish():
         GALLERY.write_text(json.dumps(gallery, indent=2) + "\n",
                            encoding="utf-8", newline="\n")
 
-    for cmd in (["optimize_images.py"], ["build.py"]):
+    for cmd in (["optimize_images.py", "--only", *stems], ["build.py"]):
         r = subprocess.run([sys.executable, *cmd], cwd=REPO,
                            capture_output=True, text=True)
         log.append(f"$ python {cmd[0]} -> exit {r.returncode}")

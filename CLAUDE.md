@@ -70,6 +70,16 @@ filter bar showed "Portraits (23)" out of 23 images. Orientation was renamed to
 `is-wide`/`is-tall`, which frees `landscape` to be a real category.
 `tests/test_taxonomy.py` guards this.
 
+## Kids' faces are never published (Evan, 2026-10-17, binding)
+
+If a photo with our kids is shared, their faces are hidden behind a hard emoji (or
+something equally unrecoverable and tasteful): never blur, never pixelate. The guard is
+`tools/picker/faces.py` (`check`, `mask`, `clear`, `status`, `gate`); `publish_external.py`
+runs the gate on every frame and `optimize_images.py` refuses a master with a detected face
+unless a `faces` event (masked or cleared) exists for its id. Both fail closed. Only a name in
+`face_clearers` (`_studio_settings.json`) can clear a frame. Never bypass the gate; publish the
+`<stem>_masked.jpg` that `faces.py mask --auto --apply` writes. Details: `tools/picker/faces.py`.
+
 ## Things that will bite you
 
 - **`sizes` differs by orientation.** Wide tiles span two grid columns, tall
