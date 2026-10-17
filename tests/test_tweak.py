@@ -458,3 +458,190 @@ def test_helper_files_are_never_counted_as_his_export(lib):
     assert got[0].name == "DSC_0001.jpg"
     (folder / "DSC_0001.jpg").unlink()
     assert f.find_export(folder, "DSC_0001.jpg", src.stat().st_mtime_ns, None) is None
+
+
+# ------------------------------------------------------------------ review fixes
+
+def test_a_frame_id_with_dotdot_or_absolute_is_refused_for_every_verb(lib, capsys):
+    top = lib["root"] / "top.jpg"                   # what Hiking/../top.jpg would reach
+    synthetic(top)
+    os.utime(top, (T0 + 5_000_000, T0 + 5_000_000))
+    make_candidate(lib, capsys)
+    before = snap(lib["tmp"])
+    for bad in ("Hiking/../top.jpg", "../top.jpg", str(lib["master"]), "C:/Windows/x.jpg", "/etc/x.jpg"):
+        for verb, extra in (("accept", ["--apply"]), ("reject", ["--apply"]), ("measure", []),
+                            ("suggest", []), ("apply", ["--params", "sky_pull=0.3", "--apply"])):
+            code, out = run(lib, verb, bad, *extra, capsys=capsys)
+            assert code == 3 and "refusing frame" in out, (verb, bad, out)
+    assert snap(lib["tmp"]) == before
+    assert rows(lib) == []
+
+
+def test_the_dotdot_check_also_covers_an_explicit_export_flag(lib, capsys):
+    code, out = run(lib, "apply", "Hiking/../top.jpg", "--export", str(lib["export"]),
+                    "--params", "sky_pull=0.3", "--apply", capsys=capsys)
+    assert code == 3 and "refusing frame" in out
+
+
+def test_a_candidate_outside_the_finish_folder_is_refused(lib):
+    t = tweak()
+    f = t.Found("x", None, lib["finish"], lib["root"] / "elsewhere" / "a.jpg", None, lib["root"] / "_Finish")
+    with pytest.raises(t.Refused):
+        t.need_export(f)
+    with pytest.raises(t.Refused):
+        t.need_candidate(f, lib["root"] / "elsewhere" / "a.jpg")
+
+
+def test_accept_resolves_the_bus_before_any_rename(lib, capsys, monkeypatch):
+    cand = make_candidate(lib, capsys)
+    (lib["tmp"] / "_vault_paths.json").write_text("{ this is not json", encoding="utf-8")
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv("MAYNIAC_STUDIO_EVENTS", raising=False)
+    monkeypatch.setenv("VAULT_PATH", str(lib["tmp"]))
+    before = snap(lib["finish"])
+    code = tweak().main(["accept", FRAME, "--settings", str(lib["settings"]), "--recipes", str(lib["recipes"]),
+                         "--apply"])
+    assert code == 2
+    assert "error" in capsys.readouterr().out
+    assert snap(lib["finish"]) == before               # nothing renamed, candidate still there
+    assert cand.exists() and not list(lib["finish"].glob("*pre-helper*"))
+
+
+def test_accept_rolls_back_on_any_exception_not_just_oserror(lib, capsys, monkeypatch):
+    cand = make_candidate(lib, capsys)
+    before = snap(lib["finish"])
+    t = tweak()
+
+    def boom(*a, **k):
+        raise ValueError("bus exploded")
+    monkeypatch.setattr(t.link, "append_event", boom)
+    code = t.main(["accept", FRAME, "--settings", str(lib["settings"]), "--events-dir", str(lib["events"]),
+                   "--recipes", str(lib["recipes"]), "--apply"])
+    assert code == 2 and "bus exploded" in capsys.readouterr().out
+    assert snap(lib["finish"]) == before and cand.exists()
+
+
+def test_reject_that_cannot_delete_writes_no_event(lib, capsys, monkeypatch):
+    cand = make_candidate(lib, capsys)
+    t = tweak()
+
+    def locked(self, *a, **k):
+        raise PermissionError("locked by Lightroom")
+    monkeypatch.setattr(Path, "unlink", locked)
+    code = t.main(["reject", FRAME, "--settings", str(lib["settings"]), "--events-dir", str(lib["events"]),
+                   "--recipes", str(lib["recipes"]), "--apply"])
+    assert code == 2 and "locked" in capsys.readouterr().out
+    assert cand.exists() and rows(lib) == []
+
+
+def test_reject_deletes_first_then_writes_the_event(lib, capsys, monkeypatch):
+    cand = make_candidate(lib, capsys)
+    t = tweak()
+    seen = {}
+    real = t.link.append_event
+
+    def spy(*a, **k):
+        seen["candidate_existed_at_event"] = cand.exists()
+        return real(*a, **k)
+    monkeypatch.setattr(t.link, "append_event", spy)
+    assert t.main(["reject", FRAME, "--settings", str(lib["settings"]), "--events-dir", str(lib["events"]),
+                   "--recipes", str(lib["recipes"]), "--apply"]) == 0
+    assert seen == {"candidate_existed_at_event": False}
+
+
+def test_apply_refuses_a_non_jpeg_export(lib, capsys):
+    png = lib["finish"] / "DSC_0001.png"
+    Image.open(lib["export"]).save(png)
+    lib["export"].unlink()
+    os.utime(png, (T0 + 3_000_000, T0 + 3_000_000))
+    before = snap(lib["tmp"])
+    code, out = run(lib, "apply", FRAME, "--params", "sky_pull=0.3", "--apply", capsys=capsys)
+    assert code == 3 and "JPEG" in out and ".png" in out
+    assert snap(lib["tmp"]) == before
+
+
+def test_params_on_top_of_a_recipe_make_it_a_modified_candidate_and_spare_the_hit_rate(lib, capsys):
+    save_recipe(lib, capsys)
+    code, out = run(lib, "apply", FRAME, "--recipe", "blown-sky", "--params", "sky_pull=0.2", "--apply",
+                    capsys=capsys)
+    assert code == 0 and "modified from recipe blown-sky" in out
+    prov = tweak().read_provenance(lib["finish"] / "DSC_0001_helper.jpg")
+    assert prov["recipe"] is None and prov["modified_from"] == "blown-sky" and prov["params"]["sky_pull"] == 0.2
+    assert prov["params"]["highlights"] == 0.2                       # the rest still came from the recipe
+    run(lib, "accept", FRAME, "--apply", capsys=capsys)
+    (row,) = rows(lib)
+    assert row["recipe"] is None and row["modified_from"] == "blown-sky" and row["accepted"] is True
+    code, out = run(lib, "suggest", FRAME, "--note", "sky blown", capsys=capsys)
+    assert "no decisions yet" in out                                 # blown-sky earned nothing from it
+
+
+def test_a_plain_recipe_apply_has_no_modified_from(lib, capsys):
+    make_candidate(lib, capsys)
+    run(lib, "accept", FRAME, "--apply", capsys=capsys)
+    (row,) = rows(lib)
+    assert row["recipe"] == "blown-sky" and "modified_from" not in row
+
+
+def test_apply_says_when_it_replaces_an_undecided_candidate(lib, capsys):
+    code, out = run(lib, "apply", FRAME, "--params", "sky_pull=0.3", "--apply", capsys=capsys)
+    assert "replacing an undecided candidate" not in out
+    code, out = run(lib, "apply", FRAME, "--params", "sky_pull=0.2", "--apply", capsys=capsys)
+    assert code == 0 and "replacing an undecided candidate" in out
+
+
+def test_suggest_json_carries_the_export_and_the_exact_candidate_path(lib, capsys):
+    save_recipe(lib, capsys)
+    code, out = run(lib, "suggest", FRAME, "--json", capsys=capsys)
+    j = json.loads(out)
+    assert code == 0
+    assert set(j) == {"frame", "measure", "export", "candidate", "candidate_exists", "matches"}
+    assert j["export"] == str(lib["export"]) and j["candidate"] == str(lib["finish"] / "DSC_0001_helper.jpg")
+    assert j["candidate_exists"] is False
+    run(lib, "apply", FRAME, "--params", "sky_pull=0.3", "--apply", capsys=capsys)
+    code, out = run(lib, "suggest", FRAME, "--json", capsys=capsys)
+    assert json.loads(out)["candidate_exists"] is True
+    assert Path(json.loads(out)["candidate"]).is_file()
+
+
+def test_suggest_json_export_and_candidate_are_null_before_there_is_an_export(lib, capsys):
+    lib["export"].unlink()
+    code, out = run(lib, "suggest", FRAME, "--json", capsys=capsys)
+    j = json.loads(out)
+    assert code == 0 and j["export"] is None and j["candidate"] is None and j["candidate_exists"] is False
+    assert j["matches"] == []
+
+
+def test_suggest_json_error_is_an_error_object_with_a_nonzero_exit(lib, capsys):
+    code, out = run(lib, "suggest", "Hiking/../top.jpg", "--json", capsys=capsys)
+    assert code == 3 and "error" in json.loads(out) and "matches" not in json.loads(out)
+    code, out = run(lib, "suggest", "No/Such/Frame.jpg", "--json", capsys=capsys)
+    assert code == 3 and "error" in json.loads(out)
+    lib["settings"].write_text("{ not json", encoding="utf-8")
+    code, out = run(lib, "suggest", FRAME, "--json", capsys=capsys)
+    assert code == 2 and "error" in json.loads(out)
+    with pytest.raises(SystemExit) as e:                              # a usage error is JSON too
+        tweak().main(["suggest", "--json"])
+    assert e.value.code == 2 and "error" in json.loads(capsys.readouterr().out)
+
+
+def test_a_no_match_is_not_an_error(lib, capsys):
+    code, out = run(lib, "suggest", FRAME, "--json", capsys=capsys)
+    j = json.loads(out)
+    assert code == 0 and "error" not in j and j["matches"] == []
+
+
+@pytest.mark.parametrize("style", ["equals", "separate"])
+def test_note_text_that_starts_with_a_dash_is_a_value(lib, capsys, style):
+    save_recipe(lib, capsys, extra=("--trigger", "gap=0.0:0.1"))      # trigger misses: only words can match
+    note = "-sky is blown"
+    args = ["--note=" + note] if style == "equals" else ["--note", note]
+    code, out = run(lib, "suggest", FRAME, *args, capsys=capsys)
+    assert code == 0 and "blown-sky" in out and "words: blown, sky" in out
+
+
+def test_symptom_and_step_text_that_starts_with_a_dash_is_a_value(lib, capsys):
+    code, out = run(lib, "recipe", "save", "dashy", "--frame", FRAME, "--symptom", "-sky blown",
+                    "--step", "-1 stop on the sky", "--apply", capsys=capsys)
+    assert code == 0, out
+    r = saved(lib)[0]
+    assert r["symptom"] == "-sky blown" and r["lightroom_steps"] == ["-1 stop on the sky"]

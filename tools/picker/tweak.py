@@ -17,7 +17,10 @@ not a tone pass and it never runs on a schedule. No model, no network: PIL and n
 path to the export inside the finish folder. The image the helper works on is his EXPORT in
 `<photos_root>/<finish_dir>/<outing>/`; `apply` writes only `<export stem>_helper.jpg` beside
 it. The master, the outing folder, `Portfolio Selections` and `Portfolio Corrected` are never
-touched (every write is guarded to sit under the finish folder).
+touched: every IMAGE write, rename and delete is guarded to sit under the finish
+folder, and a frame id with `..` or in absolute form is refused. The guard covers images only;
+`recipes.yaml` is a separate file with its own single writer (`recipe save|edit|retire`).
+`apply` works on JPEG exports only (the candidate is a JPEG and `accept` swaps it in as `.jpg`).
 
 `accept` replaces the export with the candidate and keeps the replaced export as
 `<stem>_pre-helper.<ext>` (`-2`, `-3` ... when that name is taken; nothing is ever deleted).
@@ -25,7 +28,10 @@ touched (every write is guarded to sit under the finish folder).
 `studio-picker.jsonl` through studio_link:
 
     {"kind": "tweak", "frame": <id>, "recipe": <name or null>, "accepted": true|false,
-     "export": <path>, "outing": <id>, ...bus envelope}
+     "export": <path>, "outing": <id>, ["modified_from": <recipe>,] ...bus envelope}
+
+`apply --recipe X --params ...` is no longer recipe X: the candidate and the event carry
+`recipe: null, modified_from: X`, so X's hit rate stays clean.
 
 A recipe earns a hit rate from those rows (accepted / decided). `recipes.yaml` has exactly one
 writer: `recipe save|edit|retire`. Every verb that writes is a dry run without `--apply`.
@@ -148,12 +154,14 @@ def apply_params(a, p: dict):
     return np.clip(out, 0.0, 1.0)
 
 
-def write_candidate(export: Path, cand: Path, params: dict, recipe) -> None:
+def write_candidate(export: Path, cand: Path, params: dict, recipe, modified_from=None) -> None:
     a, icc, exif = _load_rgb(export)
     out = apply_params(a, params)
     img = Image.fromarray(np.rint(out * 255.0).astype(np.uint8), "RGB")
-    note = json.dumps({"tweak": 1, "recipe": recipe, "params": params,
-                       "export_sha1": link.sha1_file(export)}, sort_keys=True).encode("ascii")
+    meta = {"tweak": 1, "recipe": recipe, "params": params, "export_sha1": link.sha1_file(export)}
+    if modified_from:
+        meta["modified_from"] = modified_from
+    note = json.dumps(meta, sort_keys=True).encode("ascii")
     part = cand.with_name(cand.name + ".part")
     kw = {"quality": 95, "subsampling": 0, "comment": note}
     if icc:
@@ -311,9 +319,9 @@ def _under(path: Path, base: Path) -> bool:
 
 
 class Found:
-    def __init__(self, frame, master, folder, export, manifest_outing):
+    def __init__(self, frame, master, folder, export, manifest_outing, base=None):
         self.frame, self.master, self.folder = frame, master, folder
-        self.export, self.manifest_outing = export, manifest_outing
+        self.export, self.manifest_outing, self.base = export, manifest_outing, base
 
 
 def locate(a, settings, root: Path) -> Found:
@@ -321,6 +329,8 @@ def locate(a, settings, root: Path) -> Found:
     arg = str(a.frame)
     explicit = Path(a.export) if getattr(a, "export", None) else None
     as_path = Path(arg)
+    if not as_path.is_absolute() and ".." in arg.replace("\\", "/").split("/"):
+        raise Refused("refusing frame %r: a frame id has no `..`" % arg)
     if explicit is None and as_path.is_absolute() and as_path.is_file() and _under(as_path, base):
         explicit = as_path
     if explicit is not None:
@@ -340,9 +350,14 @@ def locate(a, settings, root: Path) -> Found:
                     fid = k
                     break
         master = root / fid
-        return Found(fid, master if master.is_file() else None, folder, explicit, man["outing"])
+        return Found(fid, master if master.is_file() else None, folder, explicit, man["outing"], base)
 
-    fid = arg.replace("\\", "/").strip("/")
+    fid = arg.replace("\\", "/")
+    if (as_path.is_absolute() or Path(fid).is_absolute() or re.match(r"^[A-Za-z]:", fid) or fid.startswith("/")
+            or ".." in fid.split("/")):
+        raise Refused("refusing frame %r: a frame id is relative to photos_root, with no `..` and not absolute "
+                      "(an absolute path is only taken when it is an export inside %s)" % (arg, base))
+    fid = fid.strip("/")
     master = root / fid
     folder, entry, man_outing = None, None, None
     if base.is_dir():
@@ -363,14 +378,24 @@ def locate(a, settings, root: Path) -> Found:
         export = find_export(folder, entry["name"], entry["src_mtime_ns"], entry.get("sha1"))
     elif master.is_file():
         export = find_export(folder, master.name, master.stat().st_mtime_ns, None)
-    return Found(fid, master if master.is_file() else None, folder, export[0] if export else None, man_outing)
+    return Found(fid, master if master.is_file() else None, folder, export[0] if export else None,
+                 man_outing, base)
 
 
 def need_export(f: Found) -> Path:
     if f.export is None:
         raise Refused("no export yet for %s in %s: finish it in Lightroom first (D5: the helper "
                       "works on his export, never the master)" % (f.frame, f.folder))
+    if f.base is not None and not _under(f.export, f.base):
+        raise Refused("refusing: %s is not inside the finish folder %s" % (f.export, f.base))
     return f.export
+
+
+def need_candidate(f: Found, export: Path) -> Path:
+    cand = candidate_of(export)
+    if f.base is not None and not _under(cand, f.base):
+        raise Refused("refusing: %s is not inside the finish folder %s" % (cand, f.base))
+    return cand
 
 
 def candidate_of(export: Path) -> Path:
@@ -456,7 +481,11 @@ def cmd_suggest(a):
         found.append((-score, -(rate[0] / rate[1] if rate and rate[1] else 0.0), r["name"], r, frac, shared, rate))
     found.sort(key=lambda t: t[:3])
     if a.json:
-        print(json.dumps({"frame": f.frame, "measure": meas, "matches": [
+        print(json.dumps({"frame": f.frame, "measure": meas,
+                          "export": str(f.export) if f.export else None,
+                          "candidate": str(candidate_of(f.export)) if f.export else None,
+                          "candidate_exists": bool(f.export and candidate_of(f.export).is_file()),
+                          "matches": [
             {"name": r["name"], "trigger_match": frac == 1.0 if frac is not None else None,
              "words": shared, "hits": rate[0] if rate else 0, "decided": rate[1] if rate else 0,
              "symptom": r.get("symptom"), "lightroom_steps": r.get("lightroom_steps") or [],
@@ -486,7 +515,10 @@ def cmd_apply(a):
     settings, root = _env(a)
     f = locate(a, settings, root)
     export = need_export(f)
-    params, recipe = dict(DEFAULT), None
+    if export.suffix.lower() not in (".jpg", ".jpeg"):
+        raise Refused("apply works on JPEG exports only (this export is %s): the candidate is a JPEG and "
+                      "accept swaps it in as .jpg; export a JPEG from Lightroom" % export.suffix)
+    params, recipe, modified_from = dict(DEFAULT), None, None
     if a.recipe:
         rows = {r["name"]: r for r in load_recipes(recipes_path(settings, a.recipes))}
         if a.recipe not in rows:
@@ -495,20 +527,24 @@ def cmd_apply(a):
             raise Refused("recipe %r is retired" % a.recipe)
         params.update(parse_params(["%s=%s" % kv for kv in (rows[a.recipe].get("params") or {}).items()]))
         recipe = a.recipe
-    params.update(parse_params(a.params))
+    extra = parse_params(a.params)
+    if extra and recipe:
+        recipe, modified_from = None, recipe          # no longer that recipe: its hit rate stays clean
+    params.update(extra)
     if not any(params[k] > 0 for k in EFFECTS):
         raise ValueError("no effect requested: set at least one of %s above 0" % ", ".join(EFFECTS))
-    cand = candidate_of(export)
+    cand = need_candidate(f, export)
     shown = " ".join("%s=%s" % (k, params[k]) for k in BOUNDS)
+    tag = ("  (recipe %s)" % recipe) if recipe else ("  (modified from recipe %s)" % modified_from if modified_from else "")
     print("candidate: %s" % cand)
     print("from export: %s" % export)
-    print("params: %s%s" % (shown, "  (recipe %s)" % recipe if recipe else ""))
+    print("params: %s%s" % (shown, tag))
+    if cand.exists():
+        print("replacing an undecided candidate: %s" % cand.name)
     if not a.apply:
         print("DRY RUN - pass --apply to write the candidate (the export is never changed)")
         return 0
-    if not _under(cand, finish_base(settings, root)):
-        raise Refused("refusing: candidate would sit outside the finish folder")
-    write_candidate(export, cand, params, recipe)
+    write_candidate(export, cand, params, recipe, modified_from)
     before, after = measure_file(export), measure_file(cand)
     print("wrote %s" % cand)
     print("  gap %+.3f -> %+.3f   sky %.3f -> %.3f   land %.3f -> %.3f   highlight clip %.2f%% -> %.2f%%" % (
@@ -527,17 +563,23 @@ def _outing_id(a, settings, root, f: Found):
     return link.outing_id_for(settings, root, od, a.events_dir) if od else None
 
 
-def _event(a, settings, root, f, recipe, accepted, export):
-    link.append_event(settings, "tweak", outing=_outing_id(a, settings, root, f), via=a.via,
-                      member=a.by or None, events_dir=a.events_dir, frame=f.frame,
-                      recipe=recipe, accepted=accepted, export=link.rel_or_abs(export, root))
+def _preflight(a, settings, root, f):
+    """Everything the event needs, resolved BEFORE any file moves: (bus dir, outing id)."""
+    return link.resolve_events_dir(settings, a.events_dir), _outing_id(a, settings, root, f)
+
+
+def _event(a, settings, root, f, pre, recipe, accepted, export, modified_from=None):
+    extra = {"modified_from": modified_from} if modified_from else {}
+    link.append_event(settings, "tweak", outing=pre[1], via=a.via, member=a.by or None,
+                      events_dir=pre[0], frame=f.frame, recipe=recipe, accepted=accepted,
+                      export=link.rel_or_abs(export, root), **extra)
 
 
 def cmd_accept(a):
     settings, root = _env(a)
     f = locate(a, settings, root)
     export = need_export(f)
-    cand = candidate_of(export)
+    cand = need_candidate(f, export)
     if not cand.is_file():
         raise Refused("no candidate %s: run apply first" % cand.name)
     prov = read_provenance(cand)
@@ -548,6 +590,9 @@ def cmd_accept(a):
     if new != export and new.exists():
         raise Refused("refusing: %s already exists" % new.name)
     pre = free_pre(export)
+    if not (_under(new, f.base) and _under(pre, f.base)):
+        raise Refused("refusing: the swap would leave the finish folder")
+    bus = _preflight(a, settings, root, f)               # a bad bus fails here, before any rename
     print("export %s -> kept as %s; candidate becomes %s" % (export.name, pre.name, new.name))
     if not a.apply:
         print("DRY RUN - pass --apply to swap the export and write the accept event")
@@ -555,12 +600,12 @@ def cmd_accept(a):
     os.rename(export, pre)
     try:
         os.rename(cand, new)
-    except OSError:
+    except Exception:
         os.rename(pre, export)
         raise
     try:
-        _event(a, settings, root, f, recipe, True, new)
-    except (RuntimeError, OSError, KeyError, FileNotFoundError):
+        _event(a, settings, root, f, bus, recipe, True, new, prov.get("modified_from"))
+    except Exception:
         os.rename(new, cand)
         os.rename(pre, export)
         raise
@@ -572,16 +617,18 @@ def cmd_reject(a):
     settings, root = _env(a)
     f = locate(a, settings, root)
     export = need_export(f)
-    cand = candidate_of(export)
+    cand = need_candidate(f, export)
     if not cand.is_file():
         raise Refused("no candidate %s to reject" % cand.name)
-    recipe = a.recipe or read_provenance(cand).get("recipe")
+    prov = read_provenance(cand)
+    recipe = a.recipe or prov.get("recipe")
+    bus = _preflight(a, settings, root, f)
     print("delete candidate %s (the export stays)" % cand.name)
     if not a.apply:
         print("DRY RUN - pass --apply to delete it and write the reject event")
         return 0
-    _event(a, settings, root, f, recipe, False, export)
-    cand.unlink()
+    cand.unlink()                                         # if this fails no event is written
+    _event(a, settings, root, f, bus, recipe, False, export, prov.get("modified_from"))
     print("rejected")
     return 0
 
@@ -670,7 +717,7 @@ def cmd_recipe(a):
 # ---------------------------------------------------------------- cli
 
 def build_parser():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = _Parser(description=__doc__.split("\n\n")[0])
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--settings")
     common.add_argument("--photos-root")
@@ -717,20 +764,51 @@ def build_parser():
     return ap
 
 
+class _Parser(argparse.ArgumentParser):
+    json_errors = False
+
+    def error(self, message):
+        if self.json_errors:
+            print(json.dumps({"error": message}))
+            raise SystemExit(2)
+        super().error(message)
+
+
+VALUE_OPTS = ("--note", "--symptom", "--step")
+
+
+def _glue(argv):
+    """`--note "-sky"` -> `--note=-sky`, so a value that starts with a dash is still a value."""
+    out, i = [], 0
+    while i < len(argv):
+        if argv[i] in VALUE_OPTS and i + 1 < len(argv):
+            out.append("%s=%s" % (argv[i], argv[i + 1]))
+            i += 2
+        else:
+            out.append(argv[i])
+            i += 1
+    return out
+
+
 def main(argv=None) -> int:
     link.stdout_utf8()
+    argv = _glue(list(sys.argv[1:] if argv is None else argv))
+    _Parser.json_errors = "--json" in argv
     a = build_parser().parse_args(argv)
+    as_json = getattr(a, "json", False)
+
+    def fail(code, msg, plain):
+        print(json.dumps({"error": msg}) if as_json else plain)
+        return code
+
     if a.cmd == "recipe" and a.verb != "list" and not a.name:
-        print("error: recipe %s needs a NAME" % a.verb)
-        return 2
+        return fail(2, "recipe %s needs a NAME" % a.verb, "error: recipe %s needs a NAME" % a.verb)
     try:
         return a.fn(a)
     except Refused as exc:
-        print("refused: %s" % exc)
-        return 3
-    except (ValueError, OSError, RuntimeError, KeyError) as exc:
-        print("error: %s" % exc)
-        return 2
+        return fail(3, str(exc), "refused: %s" % exc)
+    except Exception as exc:  # noqa: BLE001  the CLI boundary: a clean error, never a traceback
+        return fail(2, str(exc), "error: %s" % exc)
 
 
 if __name__ == "__main__":
