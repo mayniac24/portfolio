@@ -13,6 +13,7 @@ in JSON, so they can never drift from the actual files.
     python build.py --check    exit 1 if index.html is out of date (for CI)
 """
 
+import html
 import json
 import re
 import sys
@@ -79,6 +80,26 @@ def render_photo(p: dict, indent: str = "        ") -> str:
     )
 
 
+def render_cta(cta: dict, indent: str = "        ") -> str:
+    """A full-row booking band inside the grid. It is not a .gallery-item, so the
+    filter and lightbox scripts ignore it. Its words and price live in gallery.json."""
+    e = html.escape
+    return "\n".join([
+        f'{indent}<div class="gallery-cta">',
+        f'{indent}    <p class="cta-heading">{e(cta["heading"])}</p>',
+        f'{indent}    <p class="offer-line">{e(cta["line"])}</p>',
+        f'{indent}    <a class="hub-btn" href="{e(cta["href"], quote=True)}">{e(cta["button"])}</a>',
+        f'{indent}</div>',
+    ])
+
+
+def render_gallery(photos: list[dict], cta: dict | None) -> str:
+    parts = [render_photo(p) for p in photos]
+    if cta and 0 < int(cta.get("after", 0)) < len(parts):
+        parts.insert(int(cta["after"]), render_cta(cta))
+    return "\n".join(parts)
+
+
 def render_filters(cats: list[dict], photos: list[dict], indent: str = "        ") -> str:
     used = {p["category"] for p in photos}
     lines = [f'{indent}<button class="filter-btn active" data-filter="all">All</button>']
@@ -102,7 +123,7 @@ def build() -> str:
 
     html = INDEX.read_text(encoding="utf-8")
     for regex, body in (
-        (GALLERY_RE, "\n".join(render_photo(p) for p in photos)),
+        (GALLERY_RE, render_gallery(photos, data.get("cta"))),
         (FILTERS_RE, render_filters(cats, photos)),
     ):
         if not regex.search(html):
