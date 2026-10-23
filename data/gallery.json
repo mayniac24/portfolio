@@ -201,12 +201,6 @@
       "captured": "2024-12-21"
     },
     {
-      "id": "20240326-DSC_0482",
-      "category": "landscape",
-      "attributes": [],
-      "alt": "Palm trees on a green sea cliff above the surf at Pololu Valley, Hawaii."
-    },
-    {
       "id": "20250818-DSC_0296",
       "category": "landscape",
       "attributes": [],
@@ -298,6 +292,12 @@
       "category": "landscape",
       "attributes": [],
       "alt": "Snow-covered peak catching warm light through a screen of pines."
+    },
+    {
+      "id": "20240326-DSC_0482",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Palm trees on a green sea cliff above the surf at Pololu Valley, Hawaii."
     }
   ],
   "cta": {
