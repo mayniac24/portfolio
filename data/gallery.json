@@ -28,11 +28,10 @@
       "alt": "Couple in formal attire stands on a dock overlooking a scenic lake with mountains."
     },
     {
-      "id": "20260202-DSC_0292-1",
-      "category": "maternity",
+      "id": "20241113-DSC_0059",
+      "category": "landscape",
       "attributes": [],
-      "alt": "Pregnant woman in a green dress stands in an open field at sunset with mountains and dramatic sky behind her.",
-      "captured": "2025-08-20 19:32:07"
+      "alt": "Longs Peak silhouetted against a burning orange sunset sky."
     },
     {
       "id": "20250927-DSC_0590",
@@ -47,25 +46,6 @@
       "alt": "A couple in wedding attire poses on a wooden bridge with snow-capped mountains and autumn foliage."
     },
     {
-      "id": "20241113-DSC_0059",
-      "category": "landscape",
-      "attributes": [],
-      "alt": "Longs Peak silhouetted against a burning orange sunset sky."
-    },
-    {
-      "id": "20260202-DSC_0197-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "A pregnant woman in a green dress stands in a field with mountains and forest in the background.",
-      "captured": "2025-08-20 19:15:55"
-    },
-    {
-      "id": "20250927-DSC_0668",
-      "category": "wedding",
-      "attributes": [],
-      "alt": "A couple poses by a lake with a forested mountain in the background."
-    },
-    {
       "id": "20261012-DSC_0260",
       "category": "landscape",
       "attributes": [],
@@ -73,17 +53,10 @@
       "captured": "2026-10-12"
     },
     {
-      "id": "20250927-DSC_0424",
+      "id": "20250927-DSC_0668",
       "category": "wedding",
       "attributes": [],
-      "alt": "Bride and groom pose for a wedding photo against a mountainous landscape."
-    },
-    {
-      "id": "20260202-DSC_0341-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "Pregnant woman in a green dress poses outdoors during sunset with mountainous scenery.",
-      "captured": "2025-08-20 19:38:01"
+      "alt": "A couple poses by a lake with a forested mountain in the background."
     },
     {
       "id": "20261015-DSC_0884",
@@ -106,11 +79,10 @@
       "captured": "2026-10-15"
     },
     {
-      "id": "20260202-DSC_0204-1",
-      "category": "maternity",
+      "id": "20250927-DSC_0424",
+      "category": "wedding",
       "attributes": [],
-      "alt": "A pregnant woman in a green dress poses in a scenic mountain landscape with forests and open fields.",
-      "captured": "2025-08-20 19:16:09"
+      "alt": "Bride and groom pose for a wedding photo against a mountainous landscape."
     },
     {
       "id": "20261015-DSC_0904",
@@ -134,25 +106,11 @@
       "alt": "Black and white portrait of a woman in a wedding dress with mountains and forest behind her."
     },
     {
-      "id": "20260202-DSC_0069-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "Pregnant woman in a floral dress poses against rocky mountains and trees.",
-      "captured": "2025"
-    },
-    {
       "id": "20261014-PXL_20261014_103903",
       "category": "landscape",
       "attributes": [],
       "alt": "Fog hangs over a mixed forest of pale aspens and dark pines.",
       "captured": "2026-10-14"
-    },
-    {
-      "id": "20260202-DSC_0034-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "A pregnant woman poses outdoors near rocks and trees with mountains in the background.",
-      "captured": "2025"
     },
     {
       "id": "20250927-DSC_0319",
@@ -166,41 +124,6 @@
       "attributes": [],
       "alt": "A pale aspen trunk stands among snow-flecked spruce boughs.",
       "captured": "2026-10-14"
-    },
-    {
-      "id": "20260202-DSC_0026-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "Pregnant woman posing among trees and rock formations in a scenic outdoor setting.",
-      "captured": "2025"
-    },
-    {
-      "id": "20260202-DSC_0413-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "Pregnant woman in a green dress stands in a field with mountains and a colorful sunset sky.",
-      "captured": "2025-08-20 19:57:23"
-    },
-    {
-      "id": "20261013-DSC_0608",
-      "category": "landscape",
-      "attributes": [],
-      "alt": "A Steller's jay with a black crest and bright blue tail perches on a lichen-covered rock.",
-      "captured": "2026-10-13"
-    },
-    {
-      "id": "20260202-DSC_0056-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "Pregnant woman posing in a scenic mountain forest during golden hour.",
-      "captured": "2025"
-    },
-    {
-      "id": "20261013-DSC_0274",
-      "category": "landscape",
-      "attributes": [],
-      "alt": "Fog swallows a rocky summit above a stand of golden autumn aspens.",
-      "captured": "2026-10-13"
     },
     {
       "id": "20250927-DSC_0646",
@@ -221,6 +144,33 @@
       "attributes": [],
       "alt": "A hillside of spruce frosted with fresh snow fades into fog.",
       "captured": "2026-10-14"
+    },
+    {
+      "id": "20261013-DSC_0608",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "A Steller's jay with a black crest and bright blue tail perches on a lichen-covered rock.",
+      "captured": "2026-10-13"
+    },
+    {
+      "id": "20261013-DSC_0274",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Fog swallows a rocky summit above a stand of golden autumn aspens.",
+      "captured": "2026-10-13"
+    },
+    {
+      "id": "20261013-DSC_0553",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "A dark peak half-hidden by a billowing cloud above brown tundra slopes.",
+      "captured": "2026-10-13"
+    },
+    {
+      "id": "20220712-DSC_0358",
+      "category": "landscape",
+      "attributes": [],
+      "alt": "Chimney Rock sandstone spires lit by low evening sun against a clear sky."
     },
     {
       "id": "20261014-DSC_0712",
@@ -255,19 +205,6 @@
       "category": "landscape",
       "attributes": [],
       "alt": "Palm trees on a green sea cliff above the surf at Pololu Valley, Hawaii."
-    },
-    {
-      "id": "20261013-DSC_0553",
-      "category": "landscape",
-      "attributes": [],
-      "alt": "A dark peak half-hidden by a billowing cloud above brown tundra slopes.",
-      "captured": "2026-10-13"
-    },
-    {
-      "id": "20220712-DSC_0358",
-      "category": "landscape",
-      "attributes": [],
-      "alt": "Chimney Rock sandstone spires lit by low evening sun against a clear sky."
     },
     {
       "id": "20250818-DSC_0296",
@@ -361,27 +298,6 @@
       "category": "landscape",
       "attributes": [],
       "alt": "Snow-covered peak catching warm light through a screen of pines."
-    },
-    {
-      "id": "20260202-DSC_0139-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "A woman and child stand in a golden field at sunset with mountains in the distance.",
-      "captured": "2025"
-    },
-    {
-      "id": "20260202-DSC_0231-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "Pregnant woman and young child stand in a sunlit meadow with mountains in the distance.",
-      "captured": "2025-08-20 19:18:32"
-    },
-    {
-      "id": "20260202-DSC_0385-1",
-      "category": "maternity",
-      "attributes": [],
-      "alt": "Pregnant woman and child holding hands in a field during sunset with mountain range.",
-      "captured": "2025-08-20 19:54:51"
     }
   ],
   "cta": {
