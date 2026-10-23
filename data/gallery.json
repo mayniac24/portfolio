@@ -310,7 +310,11 @@
   "cta": {
     "after": 12,
     "heading": "Outdoor sessions in Northern Colorado",
-    "line": "Mini sessions: $150 · 25 minutes · 10 edited photos",
+    "line": [
+      "Mini session: $150 · 25 minutes · 10 edited photos",
+      "Full session: $300 · 60 minutes · 30 edited photos"
+    ],
+    "note": "Introductory rates through January 31. After that, $225 and $375.",
     "button": "Book a session",
     "href": "#contact"
   }

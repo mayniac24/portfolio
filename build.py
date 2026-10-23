@@ -84,10 +84,12 @@ def render_cta(cta: dict, indent: str = "        ") -> str:
     """A full-row booking band inside the grid. It is not a .gallery-item, so the
     filter and lightbox scripts ignore it. Its words and price live in gallery.json."""
     e = html.escape
+    lines = cta["line"] if isinstance(cta["line"], list) else [cta["line"]]
     return "\n".join([
         f'{indent}<div class="gallery-cta">',
         f'{indent}    <p class="cta-heading">{e(cta["heading"])}</p>',
-        f'{indent}    <p class="offer-line">{e(cta["line"])}</p>',
+        *(f'{indent}    <p class="offer-line">{e(line)}</p>' for line in lines),
+        *([f'{indent}    <p class="offer-note">{e(cta["note"])}</p>'] if cta.get("note") else []),
         f'{indent}    <a class="hub-btn" href="{e(cta["href"], quote=True)}">{e(cta["button"])}</a>',
         f'{indent}</div>',
     ])
